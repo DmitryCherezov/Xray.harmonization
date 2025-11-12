@@ -12,6 +12,17 @@ Previous studies have shown that such scanner- and protocol-induced variability 
 
 ## 2. Aims
 
+This project aims to investigate how image normalization and harmonization techniques affect the reliability and fairness of AI-based diagnostic models trained on heterogeneous X-ray datasets.  
+The main objectives are as follows:
+
+1. **Compare data normalization methods**  
+   Evaluate and contrast multiple normalization and harmonization techniques (e.g., histogram matching, z-score normalization, quantile mapping, and physics-based corrections) applied to X-ray datasets acquired from scanners with varying technical characteristics.
+
+2. **Assess their impact on diagnostic models**  
+   Quantify how different normalization approaches influence the performance, calibration, and generalization of AI-based diagnostic models across diverse imaging sources and acquisition conditions.
+
+3. **Develop practical guidelines**  
+   Formulate recommendations for selecting optimal normalization strategies that improve diagnostic consistency, fairness, and robustness across imaging environments.
 
 
 
