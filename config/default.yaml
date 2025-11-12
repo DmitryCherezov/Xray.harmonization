@@ -1,2 +1,2 @@
-MIMIC_root: "E:/Data/MIMIC_IV"
-DB_name: "mimiciv.db"
+MIMIC_root: "D:\\003.Data\\MIMIC-IV.v3.1"
+DB_name: "mimic-iv-v3.1.db"
