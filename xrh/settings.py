@@ -5,25 +5,6 @@ import yaml
 import os
 
 
-def _project_root() -> Path:
-    """Resolve project root by walking up to the folder that has .git or config/."""
-    p = Path(__file__).resolve()
-    for parent in [p] + list(p.parents):
-        if (parent / ".git").exists() or (parent / "config").is_dir():
-            return parent if parent.is_dir() else parent.parent
-    return Path.cwd()  # fallback
-
-
-ROOT = _project_root()
-CONFIG_DIR = os.path.join(ROOT, "config")
-
-def _load_yaml(path: Path) -> Dict[str, Any]:
-    if not path.exists():
-        return {}
-    with path.open("r", encoding="utf-8") as f:
-        return yaml.safe_load(f)
-
-
 @dataclass(frozen=True)
 class Settings:
     DB_path: Path
@@ -61,6 +42,54 @@ class Settings:
 
 
 
+
+
+def _project_root() -> Path:
+    """Resolve project root by walking up to the folder that has .git or config/."""
+    p = Path(__file__).resolve()
+    for parent in [p] + list(p.parents):
+        if (parent / ".git").exists() or (parent / "config").is_dir():
+            return parent if parent.is_dir() else parent.parent
+    return Path.cwd()  # fallback
+
+
+ROOT = _project_root()
+CONFIG_DIR = os.path.join(ROOT, "config")
+
+def _load_yaml(path: Path) -> Dict[str, Any]:
+    if not path.exists():
+        return {}
+    with path.open("r", encoding="utf-8") as f:
+        return yaml.safe_load(f)
+
+
+def write_parameter(param_name: str, value: Any, yaml_profile="default") -> None:
+    """
+    Add or update a parameter inside a YAML file.
+
+    :param param_name: Top-level key name
+    :param value: Value to write
+    """
+    yaml_path = Path( os.path.join(ROOT, 'config', yaml_profile +".yaml")  )
+    data = _load_yaml(yaml_path)
+    data[param_name] = value
+    with yaml_path.open("w", encoding="utf-8") as f:
+        yaml.safe_dump(data, f, sort_keys=False, allow_unicode=True)
+
+def read_parameter(param_name: str, yaml_profile="default") -> Any:
+    """
+    Read a parameter from a YAML file.
+
+    :param param_name: Top-level key name
+    :param value: Value to write
+    """
+    
+    yaml_path = Path( os.path.join(ROOT, 'config', yaml_profile +".yaml")  )
+    data = _load_yaml(yaml_path)
+    if param_name in data.keys():
+        return data[param_name]
+    else:
+        return None
 
 
 def load_settings(yaml_profile="default") -> Settings:
