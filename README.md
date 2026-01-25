@@ -29,6 +29,8 @@ The main objectives are as follows:
 ## 3. MIMIC Collection
 
 Source: https://mimic.mit.edu/docs/gettingstarted/
+Clinical data: https://mimic.mit.edu/docs/iv/modules/
+
 
 ## 4. Metadata
 
