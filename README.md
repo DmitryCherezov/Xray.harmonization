@@ -3,21 +3,22 @@
 ## 1. Background
 
 
-
+<p style="text-align: justify;">
 Generalization plays a critical role in the successful deployment of artificial intelligence systems in clinical practice. However, previous studies have shown that diagnostic models trained on medical images may fail to generalize across institutions. In particular, Zech et al. <a href="#ref1">[1]</a>. demonstrated that pneumonia detection models trained on chest X-ray datasets exhibited substantial performance degradation when applied to data from different hospitals and departments. The authors attributed this lack of generalization, in part, to variability in imaging acquisition conditions, including differences in X-ray scanners used across institutions.
 
 From a physics perspective, such behavior of diagnostic models may be explained by differences in imaging acquisition parameters. In other words, the root of this issue lies in the physical principles underlying X-ray imaging systems. In particular, the interaction of X-ray photons with matter depends strongly on photon energy and material composition. As illustrated in Figure 1, the attenuation coefficient varies as a function of X-ray energy for different materials (i.e., biological tissues). Consequently, variations in acquisition parameters—such as tube voltage (kVp) or detector characteristics—can alter the resulting image appearance and intensity distribution, potentially affecting the performance and generalization of AI models.
-
+</p>
 <p align="center">
   <img src="plots/readme/attenuation_coefficient.png">
   <br>
   <em>Figure 1. Attenuation coefficient as a function of X-ray energy for different materials.</em>
 </p>
 
+<p style="text-align: justify;">
 As a result, the texture patterns visible in an image can vary systematically with acquisition energy <a href="#ref2">[2]</a>. This means that the same anatomical structures may produce distinct texture distributions under different scanner settings. For convolutional neural networks (CNNs) trained on images acquired at a specific energy range, exposure to images obtained with different beam energies effectively introduces unseen texture patterns <a href="#ref3">[3]</a>. Prior work has shown that standard CNN architectures trained on natural images often classify objects based on texture rather than shape <a href="#ref4">[4]</a>. Consequently, changes in acquisition conditions that alter image texture patterns may introduce distribution shifts that degrade model performance <a href="#ref5">[5]</a>.
 
 Previous studies have shown that such scanner- and protocol-induced variability can significantly impact the robustness and fairness of diagnostic AI models  <a href="#ref5">[6]</a>. Addressing this source of heterogeneity is therefore essential for developing reliable and generalizable models across diverse imaging environments.
-
+</p>
 ## 2. Aims
 
 This project aims to investigate how image normalization and harmonization techniques affect the reliability and fairness of AI-based diagnostic models trained on heterogeneous X-ray datasets.  
@@ -84,7 +85,7 @@ If you have any questions, please contact us:
 ## References
 
 <a id="ref1"></a>
-1.  Zech, J.R., Badgeley, M.A., Liu, M., Costa, A.B., Titano, J.J. and Oermann, E.K., 2018. Confounding variables can degrade generalization performance of radiological deep learning models. arXiv preprint arXiv:1807.00431.
+1. Zech, J.R., Badgeley, M.A., Liu, M., Costa, A.B., Titano, J.J. and Oermann, E.K., 2018. Confounding variables can degrade generalization performance of radiological deep learning models. arXiv preprint arXiv:1807.00431.
 
 <a id="ref2"></a>
 2. Gao, Y., Shi, Y., Cao, W., Zhang, S. and Liang, Z., 2019. Energy enhanced tissue texture in spectral computed tomography for lesion classification. Visual Computing for Industry, Biomedicine, and Art, 2(1), p.16.
