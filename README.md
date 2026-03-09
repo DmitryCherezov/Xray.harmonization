@@ -2,13 +2,21 @@
 
 ## 1. Background
 
-This project is motivated by the work of Zech et al. [1], where the authors demonstrated that pneumonia diagnostic models failed to generalize across different hospitals and departments. One of the key factors contributing to this lack of generalization is the variability in X-ray scanners used across institutions and acquisition sites.
 
-From a physical standpoint, this variability arises from differences in imaging parameters such as kVp (kilovoltage peak) [2] and mAs (milliampere-seconds) [3], which define the energy and amount of X-ray radiation, respectively. The relationship between these parameters and image contrast is well known in Radiology [4]: higher kVp/mAs values lead to lower image contrast. This effect is driven by the dependence of the X-ray attenuation coefficient [5] on photon energy—an inherently non-linear relationship even for the same tissue type.
 
-As a result, the texture patterns visible in an image can vary systematically with acquisition energy [6]. This means that the same anatomical structures may produce distinct texture distributions under different scanner settings. For convolutional neural networks (CNNs) trained on images acquired at a specific energy range, exposure to images obtained with different beam energies effectively introduces unseen texture patterns [7]. Consequently, the model encounters feature distributions that differ from its training data, leading to degraded diagnostic performance [8].
+Generalization plays a critical role in the successful deployment of artificial intelligence systems in clinical practice. However, previous studies have shown that diagnostic models trained on medical images may fail to generalize across institutions. In particular, Zech et al. <a href="#ref1">[1]</a>. demonstrated that pneumonia detection models trained on chest X-ray datasets exhibited substantial performance degradation when applied to data from different hospitals and departments. The authors attributed this lack of generalization, in part, to variability in imaging acquisition conditions, including differences in X-ray scanners used across institutions.
 
-Previous studies have shown that such scanner- and protocol-induced variability can significantly impact the robustness and fairness of diagnostic AI models [9]. Addressing this source of heterogeneity is therefore essential for developing reliable and generalizable models across diverse imaging environments.
+From a physics perspective, such behavior of diagnostic models may be explained by differences in imaging acquisition parameters. In other words, the root of this issue lies in the physical principles underlying X-ray imaging systems. In particular, the interaction of X-ray photons with matter depends strongly on photon energy and material composition. As illustrated in Figure 1, the attenuation coefficient varies as a function of X-ray energy for different materials (i.e., biological tissues). Consequently, variations in acquisition parameters—such as tube voltage (kVp) or detector characteristics—can alter the resulting image appearance and intensity distribution, potentially affecting the performance and generalization of AI models.
+
+<p align="center">
+  <img src="plots/readme/attenuation_coefficient.png">
+  <br>
+  <em>Figure 1. Attenuation coefficient as a function of X-ray energy for different materials.</em>
+</p>
+
+As a result, the texture patterns visible in an image can vary systematically with acquisition energy <a href="#ref2">[2]</a>. This means that the same anatomical structures may produce distinct texture distributions under different scanner settings. For convolutional neural networks (CNNs) trained on images acquired at a specific energy range, exposure to images obtained with different beam energies effectively introduces unseen texture patterns <a href="#ref3">[3]</a>. Prior work has shown that standard CNN architectures trained on natural images often classify objects based on texture rather than shape <a href="#ref4">[4]</a>. Consequently, changes in acquisition conditions that alter image texture patterns may introduce distribution shifts that degrade model performance <a href="#ref5">[5]</a>.
+
+Previous studies have shown that such scanner- and protocol-induced variability can significantly impact the robustness and fairness of diagnostic AI models  <a href="#ref5">[6]</a>. Addressing this source of heterogeneity is therefore essential for developing reliable and generalizable models across diverse imaging environments.
 
 ## 2. Aims
 
@@ -75,15 +83,20 @@ If you have any questions, please contact us:
 
 ## References
 
+<a id="ref1"></a>
 1.  Zech, J.R., Badgeley, M.A., Liu, M., Costa, A.B., Titano, J.J. and Oermann, E.K., 2018. Confounding variables can degrade generalization performance of radiological deep learning models. arXiv preprint arXiv:1807.00431.
 
-2. 
+<a id="ref2"></a>
+2. Gao, Y., Shi, Y., Cao, W., Zhang, S. and Liang, Z., 2019. Energy enhanced tissue texture in spectral computed tomography for lesion classification. Visual Computing for Industry, Biomedicine, and Art, 2(1), p.16.
 
-3. 
+<a id="ref3"></a>
+3. Chen, Y., Zhong, J., Wang, L., Shi, X., Lu, W., Li, J., Feng, J., Xia, Y., Chang, R., Fan, J. and Chen, L., 2022. Robustness of CT radiomics features: consistency within and between single-energy CT and dual-energy CT. European Radiology, 32(8), pp.5480-5490.
 
-4. 
+<a id="ref4"></a>
+4. Moreno-Torres, J.G., Raeder, T., Alaiz-Rodríguez, R., Chawla, N.V. and Herrera, F., 2012. A unifying view on dataset shift in classification. Pattern recognition, 45(1), pp.521-530.
 
-5. 
+<a id="ref5"></a>
+5. Cherezov, D., Fu, P. and Madabhushi, A., 2025. Quantitative assessment of impact of technical and population-based factors on fairness of AI models for chest X-ray scans. Computers in Biology and Medicine, 198, p.111147.
 
 6. 
 
@@ -92,4 +105,26 @@ If you have any questions, please contact us:
 8. 
 
 9. 
+
+
+## Interesting papers
+
+#### 1. 
+Taguchi K, Iwanczyk JS (2013) Vision 20/20: single photon counting x-ray detectors in medical imaging. Med Phys 40(10):100901. https://doi.org/10.1118/1.4820371
+Based on the paper, five energy channel images can be obtained with some PCD-XR systems.
+
+Taguchi and Iwanczyk (2013) discuss multi-energy radiography, referred to as PCD-XR (Photon Counting Detector X-Ray imaging), as a parallel development to photon-counting CT. While the paper primarily focuses on CT, the authors explicitly state that most detector technologies, imaging methods, and clinical benefits discussed apply to X-ray imaging as well. PCD-XR systems use energy-discriminating detectors to count photons in multiple energy windows, preserving spectral information that is lost with conventional energy-integrating detectors. This enables improved contrast-to-noise ratio, dose reduction, quantitative imaging, and K-edge imaging capabilities.
+
+At the time of publication, the paper notes that PCD-XR systems had already entered clinical use. The MicroDose Mammography system (Philips) is highlighted as a commercial example, utilizing an edge-on silicon strip PCD with a multi-slit scanning technique to achieve low-dose, high-quality images with minimal scatter. Additionally, bone mineral density systems such as Lunar iDXA (GE Healthcare) and Stratos DR (DMS-APELEM) equipped with PCDs from DxRay, Inc. had been on the market for several years. The authors conclude that PCD-XR represents not merely an evolution but a revolution in X-ray imaging, with potential for molecular imaging and personalized medicine applications.
+
+#### 2.
+Qasempour, Y., Mohammadi, A., Rezaei, M., Pouryazadanpanah, P., Ziaddini, F., Borbori, A., Shiri, I., Hajianfar, G., Janati, A., Ghasemirad, S. and Abdollahi, H., 2020. Radiographic texture reproducibility: The impact of different materials, their arrangement, and focal spot size. Journal of Medical Signals & Sensors, 10(4), pp.275-285.
+Even when the kVp is the same, there are other parameters that impact reproducibility.
+
+This study by Qasempour et al. (2020) investigated the reproducibility of radiographic texture features against changes in three specific parameters: focal spot size (0.6 mm vs. 1.2 mm), different phantom materials (wood, sponge, Plexiglas, rubber), and different arrangements of those materials. A detachable phantom was constructed with 1 cm thick sections of each material, and images were acquired using a digital radiography machine with consistent exposure parameters (40 kV, 4 mAs). Twenty-two texture features from histogram, GLCM, GLRLM, autoregressive, and wavelet families were extracted and analyzed using coefficient of variation (COV), intraclass correlation coefficient (ICC), and Bland-Altman methods to assess reproducibility.
+
+Results showed that texture feature reproducibility varied considerably across conditions. Against changes in focal spot size, 59% of features were highly reproducible (COV ≤ 5%), while only 4.5% of features maintained this level of reproducibility against changes in phantom materials. Against changes in material arrangement, 50% of features were highly reproducible. ICC analysis showed most features had excellent test-retest reliability (>0.90) for repeated imaging of individual materials. Bland-Altman analysis identified only one feature (SumVarnc) as non-reproducible against focal spot changes. The authors conclude that radiomic textures are vulnerable to changes in materials, their arrangement, and focal spot size, emphasizing that careful analysis of these parameters is essential before clinical application of radiomics.
+
+
+
 
