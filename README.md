@@ -17,16 +17,19 @@ From a physics perspective, such behavior of diagnostic models may be explained 
   <em>Figure 1. Attenuation coefficient as a function of X-ray energy for different materials.</em>
 </p>
 
-<p style="text-align: justify;">
+<p align="justify">
 As a result, the texture patterns visible in an image can vary systematically with acquisition energy <a href="#ref2">[2]</a>. This means that the same anatomical structures may produce distinct texture distributions under different scanner settings. For convolutional neural networks (CNNs) trained on images acquired at a specific energy range, exposure to images obtained with different beam energies effectively introduces unseen texture patterns <a href="#ref3">[3]</a>. Prior work has shown that standard CNN architectures trained on natural images often classify objects based on texture rather than shape <a href="#ref4">[4]</a>. Consequently, changes in acquisition conditions that alter image texture patterns may introduce distribution shifts that degrade model performance <a href="#ref5">[5]</a>.
+</p>
 
+<p align="justify">
 Previous studies have shown that such scanner- and protocol-induced variability can significantly impact the robustness and fairness of diagnostic AI models  <a href="#ref5">[6]</a>. Addressing this source of heterogeneity is therefore essential for developing reliable and generalizable models across diverse imaging environments.
 
 </p>
 ## 2. Aims
-
+<p align="justify">
 This project aims to investigate how image normalization and harmonization techniques affect the reliability and fairness of AI-based diagnostic models trained on heterogeneous X-ray datasets.  
 The main objectives are as follows:
+</p>
 
 1. **Compare data normalization methods**  
    Evaluate and contrast multiple normalization and harmonization techniques (e.g., histogram matching, z-score normalization, quantile mapping, and physics-based corrections) applied to X-ray datasets acquired from scanners with varying technical characteristics.
@@ -40,6 +43,17 @@ The main objectives are as follows:
 
 
 ## 3. MIMIC Collection
+<p align="justify">
+The MIMIC (Medical Information Mart for Intensive Care) is a large collection of de-identified clinical datasets developed by the MIT Laboratory for Computational Physiology. The primary goal of the MIMIC project is to facilitate research in clinical decision support, epidemiology, and machine learning by providing open access to richly detailed patient data from intensive care units (ICUs). The datasets include information such as demographics, hospital admissions, laboratory measurements, clinical notes, procedures, medications, and physiological signals. All records are carefully de-identified in accordance with HIPAA regulations to protect patient privacy while enabling large-scale biomedical research.
+
+One of the most recent and widely used versions is MIMIC‑IV, which contains detailed electronic health record (EHR) data for patients treated at Beth Israel Deaconess Medical Center. MIMIC-IV includes multiple relational tables describing hospital admissions, ICU stays, laboratory results, medication administration, procedures, diagnoses, and patient demographics. Compared with earlier releases, MIMIC-IV provides an improved schema, better modular organization of clinical and ICU data, and coverage of a more recent time period.
+
+For medical imaging research, the project also includes MIMIC‑CXR, a large dataset of chest radiographs linked to corresponding radiology reports and selected patient metadata. The dataset contains hundreds of thousands of chest X-ray studies collected from routine clinical practice. Images are typically stored in the original DICOM format, which preserves acquisition metadata such as imaging parameters, scanner information, projection type, and other attributes relevant for studying imaging variability.
+
+A related derivative dataset, MIMIC‑CXR‑JPG, provides the same chest radiographs converted to JPEG images along with structured labels extracted from radiology reports using natural language processing techniques. The JPEG version is designed to simplify the use of the dataset in computer vision workflows by reducing storage size and eliminating the need for specialized DICOM processing libraries. However, unlike the original MIMIC-CXR dataset, the JPEG version contains reduced metadata and does not preserve the full set of acquisition parameters available in the DICOM files.
+
+Together, these datasets form a complementary ecosystem: MIMIC-IV provides comprehensive clinical and hospital information, MIMIC-CXR supplies high-fidelity radiographic images with detailed acquisition metadata, and MIMIC-CXR-JPG offers a lightweight image representation suitable for large-scale machine learning experiments. This combination enables researchers to study both clinical outcomes and imaging characteristics, as well as their interactions, in large real-world patient populations.
+</p>
 
 Source: https://mimic.mit.edu/docs/gettingstarted/
 Clinical data: https://mimic.mit.edu/docs/iv/modules/
