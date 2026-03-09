@@ -5,9 +5,12 @@
 
 <p align="justify">
 Generalization plays a critical role in the successful deployment of artificial intelligence systems in clinical practice. However, previous studies have shown that diagnostic models trained on medical images may fail to generalize across institutions. In particular, Zech et al. <a href="#ref1">[1]</a>. demonstrated that pneumonia detection models trained on chest X-ray datasets exhibited substantial performance degradation when applied to data from different hospitals and departments. The authors attributed this lack of generalization, in part, to variability in imaging acquisition conditions, including differences in X-ray scanners used across institutions.
+</p>
 
+<p align="justify">
 From a physics perspective, such behavior of diagnostic models may be explained by differences in imaging acquisition parameters. In other words, the root of this issue lies in the physical principles underlying X-ray imaging systems. In particular, the interaction of X-ray photons with matter depends strongly on photon energy and material composition. As illustrated in Figure 1, the attenuation coefficient varies as a function of X-ray energy for different materials (i.e., biological tissues). Consequently, variations in acquisition parameters—such as tube voltage (kVp) or detector characteristics—can alter the resulting image appearance and intensity distribution, potentially affecting the performance and generalization of AI models.
 </p>
+
 <p align="center">
   <img src="plots/readme/attenuation_coefficient.png">
   <br>
