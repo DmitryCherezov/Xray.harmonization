@@ -44,33 +44,38 @@ The main objectives are as follows:
 
 ## 3. MIMIC Collection
 <p align="justify">
-The <u>MIMIC</u> (Medical Information Mart for Intensive Care) is a large collection of de-identified clinical datasets developed by the MIT Laboratory for Computational Physiology. The primary goal of the MIMIC project is to facilitate research in clinical decision support, epidemiology, and machine learning by providing open access to richly detailed patient data from intensive care units (ICUs). The datasets include information such as demographics, hospital admissions, laboratory measurements, clinical notes, procedures, medications, and physiological signals. All records are carefully de-identified in accordance with HIPAA regulations to protect patient privacy while enabling large-scale biomedical research.
-
-<p align="justify">
-One of the most recent and widely used versions is <u>MIMIC‑IV</u>, which contains detailed electronic health record (EHR) data for patients treated at Beth Israel Deaconess Medical Center. MIMIC-IV includes multiple relational tables describing hospital admissions, ICU stays, laboratory results, medication administration, procedures, diagnoses, and patient demographics. Compared with earlier releases, MIMIC-IV provides an improved schema, better modular organization of clinical and ICU data, and coverage of a more recent time period.
-
-<p align="justify">
-For medical imaging research, the project also includes <u>MIMIC‑CXR</u>, a large dataset of chest radiographs linked to corresponding radiology reports and selected patient metadata. The dataset contains hundreds of thousands of chest X-ray studies collected from routine clinical practice. Images are typically stored in the original DICOM format, which preserves acquisition metadata such as imaging parameters, scanner information, projection type, and other attributes relevant for studying imaging variability.
-
-<p align="justify">
-A related derivative dataset, <u>MIMIC‑CXR‑JPG</u>, provides the same chest radiographs converted to JPEG images along with structured labels extracted from radiology reports using natural language processing techniques. The JPEG version is designed to simplify the use of the dataset in computer vision workflows by reducing storage size and eliminating the need for specialized DICOM processing libraries. However, unlike the original MIMIC-CXR dataset, the JPEG version contains reduced metadata and does not preserve the full set of acquisition parameters available in the DICOM files.
-
-<p align="justify">
-Together, these datasets form a complementary ecosystem: <u>MIMIC-IV</u> provides comprehensive clinical and hospital information, MIMIC-CXR supplies high-fidelity radiographic images with detailed acquisition metadata, and MIMIC-CXR-JPG offers a lightweight image representation suitable for large-scale machine learning experiments. This combination enables researchers to study both clinical outcomes and imaging characteristics, as well as their interactions, in large real-world patient populations.
-
-
+The **MIMIC** (Medical Information Mart for Intensive Care) is a large collection of de-identified clinical datasets developed by the MIT Laboratory for Computational Physiology. The primary goal of the MIMIC project is to facilitate research in clinical decision support, epidemiology, and machine learning by providing open access to richly detailed patient data from intensive care units (ICUs). The datasets include information such as demographics, hospital admissions, laboratory measurements, clinical notes, procedures, medications, and physiological signals. All records are carefully de-identified in accordance with HIPAA regulations to protect patient privacy while enabling large-scale biomedical research.
 Source: https://mimic.mit.edu/docs/gettingstarted/
-Clinical data: https://mimic.mit.edu/docs/iv/modules/
 
+<p align="justify">
+One of the most recent and widely used versions is **MIMIC‑IV**, which contains detailed electronic health record (EHR) data for patients treated at Beth Israel Deaconess Medical Center. MIMIC-IV includes multiple relational tables describing hospital admissions, ICU stays, laboratory results, medication administration, procedures, diagnoses, and patient demographics. Compared with earlier releases, MIMIC-IV provides an improved schema, better modular organization of clinical and ICU data, and coverage of a more recent time period.
+Clinical data descriptions: https://mimic.mit.edu/docs/iv/modules/
+Dataset access: https://physionet.org/content/mimiciv/3.1/
 
-## 4. Metadata
+<p align="justify">
+For medical imaging research, the project also includes **MIMIC‑CXR**, a large dataset of chest radiographs linked to corresponding radiology reports and selected patient metadata. The dataset contains hundreds of thousands of chest X-ray studies collected from routine clinical practice. Images are typically stored in the original DICOM format, which preserves acquisition metadata such as imaging parameters, scanner information, projection type, and other attributes relevant for studying imaging variability.
+Dataset access: https://physionet.org/content/mimic-cxr/2.1.0/
 
-Current project based on MIMIC-IV v3.1
+<p align="justify">
+A related derivative dataset, **MIMIC‑CXR‑JPG**, provides the same chest radiographs converted to JPEG images along with structured labels extracted from radiology reports using natural language processing techniques. The JPEG version is designed to simplify the use of the dataset in computer vision workflows by reducing storage size and eliminating the need for specialized DICOM processing libraries. However, unlike the original MIMIC-CXR dataset, the JPEG version contains reduced metadata and does not preserve the full set of acquisition parameters available in the DICOM files.
+Dataset access: https://physionet.org/content/mimic-cxr-jpg/2.1.0/
+
+<p align="justify">
+Together, these datasets form a complementary ecosystem: MIMIC-IV provides comprehensive clinical and hospital information, MIMIC-CXR supplies high-fidelity radiographic images with detailed acquisition metadata, and MIMIC-CXR-JPG offers a lightweight image representation suitable for large-scale machine learning experiments. This combination enables researchers to study both clinical outcomes and imaging characteristics, as well as their interactions, in large real-world patient populations.
+
+<p align="justify">
+MIMIC-IV provides detailed clinical information derived from electronic health records, including patient demographics, hospital admissions, diagnoses, procedures, and laboratory measurements. The MIMIC-CXR dataset contains chest radiographs stored in DICOM format together with associated radiology reports and imaging metadata, including acquisition parameters and scanner-related information. In contrast, the MIMIC-CXR-JPEG dataset provides the same chest radiographs converted to JPEG images and includes annotations extracted from radiology reports, organized into structured CSV files with disease labels suitable for training and evaluating diagnostic machine learning models.
+
+In this prokject we used the following versions of the datasets:
+MIMIC‑IV: 2.1
+MIMIC‑CXR: 2.1
+MIMIC‑CXR‑JPG: 3.1
+
 
 ## 5. SQLite
 
-Create SQLite version of data storage so information can be processed via SQL language to increase repeatability and reproducibility of the work.
-
+<p align="justify">
+The clinical and annotation data in the MIMIC datasets are originally provided in the form of CSV files. Given the large volume of information and the substantial number of patients included in the dataset, directly working with CSV files becomes inefficient for querying and data analysis. Therefore, the CSV tables were converted into a relational database structure. While the dataset authors provide a reference schema designed for PostgreSQL, we opted to use SQLite in order to simplify the experimental workflow and reduce the infrastructure requirements. All tables were therefore imported into an SQLite database, which enabled efficient querying and data manipulation. Subsequent post-processing steps, including the computation of dataset-level statistics such as the number of patients, studies, and images, were performed using SQL queries within the SQLite environment.
 
 ## 6. Code Description
 
