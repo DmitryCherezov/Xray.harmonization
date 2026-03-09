@@ -39,6 +39,7 @@ class Settings:
     inputevents_csv: Path
     outputevents_csv: Path
     procedureevents_csv: Path
+    sql_hosp_creation_script: Path
 
 
 
@@ -131,7 +132,10 @@ def load_settings(yaml_profile="default") -> Settings:
         ingredientevents_csv = Path( os.path.join( yaml_settings['MIMIC_root'], 'physionet.org', 'files', 'mimiciv', '3.1', 'icu', 'ingredientevents'+'.csv') ),
         inputevents_csv = Path( os.path.join( yaml_settings['MIMIC_root'], 'physionet.org', 'files', 'mimiciv', '3.1', 'icu', 'inputevents'+'.csv') ),
         outputevents_csv = Path( os.path.join( yaml_settings['MIMIC_root'], 'physionet.org', 'files', 'mimiciv', '3.1', 'icu', 'outputevents'+'.csv') ),
-        procedureevents_csv = Path( os.path.join( yaml_settings['MIMIC_root'], 'physionet.org', 'files', 'mimiciv', '3.1', 'icu', 'procedureevents'+'.csv') )
+        procedureevents_csv = Path( os.path.join( yaml_settings['MIMIC_root'], 'physionet.org', 'files', 'mimiciv', '3.1', 'icu', 'procedureevents'+'.csv') ),
+        # SQL creation script
+        sql_hosp_creation_script = Path(os.path.join(ROOT, 'sql_scripts', 'create_hosp_sqlite.sql') )
+
     )
 
     return result
