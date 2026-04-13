@@ -1,0 +1,4 @@
+MIMIC_IV_root: D:\003.Data\TMP_DUMP\MIMIC-IV.v3.1
+MIMIC_CXR_root: D:\003.Data\TMP_DUMP\MIMIC-CXR.v2.1
+MIMIC_CXR_JPG_root: D:\003.Data\TMP_DUMP\MIMIC-CXR-JPG.v2.1
+DB_name: mimic-iv-v3.1.db

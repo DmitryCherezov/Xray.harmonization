@@ -1,0 +1,1758 @@
+
+/*********************************************************
+/*   00. omr
+/*********************************************************
+omr table
+The Online Medical Record (OMR) table contains miscellaneous information from the EHR.
+omr
+The Online Medical Record (OMR) table stores miscellaneous information documented in the electronic health record. It is a useful source of outpatient measurements such as blood pressure, weight, height, and body mass index.
+
+Table columns
+Name	Postgres data type
+subject_id	INTEGER NOT NULL
+chartdate	DATE NOT NULL
+seq_num	INTEGER NOT NULL
+result_name	VARCHAR(100) NOT NULL
+result_value	TEXT NOT NULL
+Detailed Description
+subject_id
+subject_id is a unique identifier which specifies an individual patient. Any rows associated with a single subject_id pertain to the same individual.
+
+chartdate
+The date on which the observation was recorded.
+
+seq_num
+An monotonically increasing integer which uniquely distinguishes results of the same type recorded on the same day. For example, if two blood pressure measurements occur on the same day, seq_num orders them chronologically.
+
+result_name
+Each row provides detail regarding a single observation in the EHR. result_name provides a human interpretable description of the observation. As of MIMIC-IV v2.2, the following table lists the number of observations and the most common value.
+
+result_name	number of observations	example value
+eGFR	240	>60
+Blood Pressure Lying	2764	120/70
+Blood Pressure Sitting	3400	120/70
+Blood Pressure Standing (1 min)	2560	90/60
+Blood Pressure Standing	523	110/70
+Blood Pressure Standing (3 mins)	626	80/50
+BMI (kg/m2)	1662112	26.6
+Weight (Lbs)	1889542	150
+Blood Pressure	2169549	110/70
+Height (Inches)	706906	64
+BMI	554	25.0
+Weight	354	150.00
+Height	39	64.50
+result_value
+result_value is the value associated with the given OMR observation. For example, for the result_name of ‘Blood Pressure’, the field_value column contains the recorded blood pressure (120/80, 130/70, and so on).
+
+
+/*********************************************************
+/*   01. provider
+/*********************************************************
+
+provider table
+The provider table lists deidentified provider identifiers used in the database.
+provider
+A description table for providers in the database referenced by provider_id. As of MIMIC-IV v2.2, this table simply lists all unique provider_id in the database.
+
+Note that most tables contain a prefix before provider_id. All columns with a suffix link to provider_id, including:
+
+admit_provider_id
+enter_provider_id
+order_provider_id
+Table columns
+Name	Postgres data type
+provider_id	VARCHAR(10) NOT NULL
+provider_id
+provider_id lists all possible identifiers for providers used throughout the database. Provider identifiers follow a consistent pattern: the letter “P”, followed by either three numbers, followed by two letters or two numbers. For example, “P003AB”, “P00102”, “P1248B”, etc. Provider identifiers are randomly generated and do not have any inherent meaning aside from uniquely identifying the same provider across the database.
+
+
+/*********************************************************
+/*   02. admissions
+/*********************************************************
+
+admissions table
+Detailed information about hospital stays.
+The admissions table gives information regarding a patient’s admission to the hospital. Since each unique hospital visit for a patient is assigned a unique hadm_id, the admissions table can be considered as a definition table for hadm_id. Information available includes timing information for admission and discharge, demographic information, the source of the admission, and so on.
+
+Links to
+patients on subject_id
+Important considerations
+The data is sourced from the admission, discharge and transfer database from the hospital (often referred to as ‘ADT’ data).
+Organ donor accounts are sometimes created for patients who died in the hospital. These are distinct hospital admissions with very short, sometimes negative lengths of stay. Furthermore, their deathtime is frequently the same as the earlier patient admission’s deathtime.
+Table columns
+Name	Postgres data type
+subject_id	INTEGER NOT NULL
+hadm_id	INTEGER NOT NULL
+admittime	TIMESTAMP NOT NULL
+dischtime	TIMESTAMP
+deathtime	TIMESTAMP
+admission_type	VARCHAR(40) NOT NULL
+admit_provider_id	VARCHAR(10)
+admission_location	VARCHAR(60)
+discharge_location	VARCHAR(60)
+insurance	VARCHAR(255)
+language	VARCHAR(10)
+marital_status	VARCHAR(30)
+race	VARCHAR(80)
+edregtime	TIMESTAMP
+edouttime	TIMESTAMP
+hospital_expire_flag	SMALLINT
+Detailed description
+The admissions table defines all hospitalizations in the database. Hospitalizations are assigned a unique random integer known as the hadm_id.
+
+subject_id, hadm_id
+Each row of this table contains a unique hadm_id, which represents a single patient’s admission to the hospital. hadm_id ranges from 2000000 - 2999999. It is possible for this table to have duplicate subject_id, indicating that a single patient had multiple admissions to the hospital. The ADMISSIONS table can be linked to the PATIENTS table using subject_id.
+
+admittime, dischtime, deathtime
+admittime provides the date and time the patient was admitted to the hospital, while dischtime provides the date and time the patient was discharged from the hospital. If applicable, deathtime provides the time of in-hospital death for the patient. Note that deathtime is only present if the patient died in-hospital, and is almost always the same as the patient’s dischtime. However, there can be some discrepancies due to typographical errors.
+
+admission_type
+admission_type is useful for classifying the urgency of the admission. There are 9 possibilities: ‘AMBULATORY OBSERVATION’, ‘DIRECT EMER.’, ‘DIRECT OBSERVATION’, ‘ELECTIVE’, ‘EU OBSERVATION’, ‘EW EMER.’, ‘OBSERVATION ADMIT’, ‘SURGICAL SAME DAY ADMISSION’, ‘URGENT’.
+
+admit_provider_id
+admit_provider_id provides an anonymous identifier for the provider who admitted the patient. Provider identifiers follow a consistent pattern: the letter “P”, followed by either three numbers, followed by two letters or two numbers. For example, “P003AB”, “P00102”, “P1248B”, etc. Provider identifiers are randomly generated and do not have any inherent meaning aside from uniquely identifying the same provider across the database.
+
+admission_location, discharge_location
+admission_location provides information about the location of the patient prior to arriving at the hospital. Note that as the emergency room is technically a clinic, patients who are admitted via the emergency room usually have it as their admission location.
+
+Similarly, discharge_location is the disposition of the patient after they are discharged from the hospital.
+
+Association with UB-04 billing codes
+admission_location and discharge_location are associated with internal hospital ibax codes which aren’t provided in MIMIC-IV. These internal codes tend to align with UB-04 billing codes.
+
+In some cases more than one internal code is associated with a given admission_location and discharge_location. This can either be do to; 1) multiple codes being used by the hospital for the same admission_location or discharge_location, or 2) during de-identification multiple internal codes may be combined into a single admission_location or discharge_location.
+
+In the tables below, we provide the matching UB-04 code(s) for the most common ibax codes for a given admission_location and discharge_location, when applicable. In cases where more than one code is given, if this combination is due to 1) in the above paragraph, the additional code must have at least 10% of the entires of the most common code.
+
+Admission UB-04 mappings:
+
+admission_location	UB-04 code(s)
+PHYSICIAN REFERRAL	1, 3
+WALK-IN/SELF REFERRAL	1
+AMBULATORY SURGERY TRANSFER	1, 2, 6
+INFORMATION NOT AVAILABLE	1, 9
+CLINIC REFERRAL	2, 8
+PROCEDURE SITE	2
+PACU	2
+TRANSFER FROM HOSPITAL	4, 6
+TRANSFER FROM SKILLED NURSING FACILITY	5
+EMERGENCY ROOM	1, 2, 7
+INTERNAL TRANSFER TO OR FROM PSYCH	none
+Discharge UB-04 mappings:
+
+discharge_location	UB-04 code(s)
+HOME	01
+ACUTE HOSPITAL	02, 81, 86
+SKILLED NURSING FACILITY	03, 64
+ASSISTED LIVING	04
+HEALTHCARE FACILITY	05, 43
+HOME HEALTH CARE	06
+AGAINST ADVICE	07
+DIED	20
+OTHER FACILITY	21, 70
+HOSPICE	50, 51
+REHAB	62
+CHRONIC/LONG TERM ACUTE CARE	63
+PSYCH FACILITY	65
+OTHER FACILITY	70
+UB-04 documentation online often provides more detail than found in the admission_location and discharge_location text, particularly for discharges.
+
+insurance, language, marital_status, ethnicity
+The insurance, language, marital_status, and ethnicity columns provide information about patient demographics for the given hospitalization. Note that as this data is documented for each hospital admission, they may change from stay to stay.
+
+edregtime, edouttime
+The date and time at which the patient was registered and discharged from the emergency department.
+
+hospital_expire_flag
+This is a binary flag which indicates whether the patient died within the given hospitalization. 1 indicates death in the hospital, and 0 indicates survival to hospital discharge.
+
+/*********************************************************
+/*   03. d_hcpcs
+/*********************************************************
+
+d_hcpcs
+Dimension table for hcpcsevents; provides a description of CPT codes.
+The d_hcpcs table
+The d_hcpcs table is used to acquire human readable definitions for the codes used in the hcpcsevents table. The concepts primarily correspond to hospital billing, and are mostly CPT codes. Unfortunately due to licensing restrictions not all code definitions are available.
+
+Links to
+hcpcsevents on code
+Table columns
+Name	Postgres data type
+code	CHAR(5) NOT NULL
+category	SMALLINT
+long_description	TEXT
+short_description	VARCHAR(180)
+Detailed description
+code
+A five character code which uniquely represents the event.
+
+category
+Broad classification of the code.
+
+long_description, short_description
+Textual descriptions of the code listed for the given row.
+
+/*********************************************************
+/*   04. d_icd_diagnoses
+/*********************************************************
+
+d_icd_diagnoses
+Dimension table for diagnoses_icd; provides a description of ICD-9/ICD-10 billed diagnoses.
+The d_icd_diagnoses table
+This table defines International Classification of Diseases (ICD) Version 9 and 10 codes for diagnoses. These codes are assigned at the end of the patient’s stay and are used by the hospital to bill for care provided.
+
+Links to
+diagnoses_icd ON icd_code and icd_version
+Table columns
+Name	Postgres data type
+icd_code	CHAR(7) NOT NULL
+icd_version	INTEGER NOT NULL
+long_title	VARCHAR(255)
+Detailed Description
+icd_code, icd_version
+icd_code is the International Coding Definitions (ICD) code.
+
+There are two versions for this coding system: version 9 (ICD-9) and version 10 (ICD-10). These can be differentiated using the icd_version column. In general, ICD-10 codes are more detailed, though code mappings (or “cross-walks”) exist which convert ICD-9 codes to ICD-10 codes.
+
+Both ICD-9 and ICD-10 codes are often presented with a decimal. This decimal is not required for interpretation of an ICD code; i.e. the icd_code of ‘0010’ is equivalent to ‘001.0’.
+
+ICD-9 and ICD-10 codes have distinct formats: ICD-9 codes are 5 character long strings which are entirely numeric (with the exception of codes prefixed with “E” or “V” which are used for external causes of injury or supplemental classification). Importantly, ICD-9 codes are retained as strings in the database as the leading 0s in codes are meaningful.
+
+ICD-10 codes are 3-7 characters long and always prefixed by a letter followed by a set of numeric values.
+
+long_title
+The long_title provides the meaning of the ICD code. For example, the ICD-9 code 0010 has long_title “Cholera due to vibrio cholerae”.
+
+/*********************************************************
+/*   05. d_icd_procedures
+/*********************************************************
+
+d_icd_procedures
+Dimension table for procedures_icd; provides a description of ICD-9/ICD-10 billed procedures.
+The d_icd_procedures table
+This table defines International Classification of Diseases (ICD) codes for procedures. These codes are assigned at the end of the patient’s stay and are used by the hospital to bill for care provided. They can further be used to identify if certain procedures have been performed (e.g. surgery).
+
+Links to
+procedures_icd on icd_code and icd_version
+Brief summary
+Table columns
+Name	Postgres data type
+icd_code	CHAR(7) NOT NULL
+icd_version	INTEGER NOT NULL
+long_title	VARCHAR(255)
+Detailed Description
+icd_code, icd_version
+icd_code is the International Coding Definitions (ICD) code.
+
+There are two versions for this coding system: version 9 (ICD-9) and version 10 (ICD-10). These can be differentiated using the icd_version column. In general, ICD-10 codes are more detailed, though code mappings (or “cross-walks”) exist which convert ICD-9 codes to ICD-10 codes.
+
+Both ICD-9 and ICD-10 codes are often presented with a decimal. This decimal is not required for interpretation of an ICD code; i.e. the icd_code of ‘0010’ is equivalent to ‘001.0’.
+
+long_title
+The title fields provide a brief definition for the given procedure code in ``.
+
+/*********************************************************
+/*   06. d_labitems
+/*********************************************************
+
+d_labitems
+Dimension table for labevents provides a description of all lab items.
+d_labitems
+d_labitems contains definitions for all itemid associated with lab measurements in the MIMIC database. All data in labevents link to the d_labitems table. Each unique (fluid, category, label) tuple in the hospital database was assigned an itemid in this table, and the use of this itemid facilitates efficient storage and querying of the data.
+
+Laboratory data contains information collected and recorded in the hospital laboratory database. This includes measurements made in wards within the hospital and clinics outside the hospital. Most concepts in this table have been mapped to LOINC codes, an openly available ontology which facilitates interoperability.
+
+Links to
+labevents on itemid
+Important considerations
+This table used to contain a column called loinc_code, which stored standardized identifiers for laboratory measurements. To support ongoing improvement of these labels, the assignment of LOINC codes is now done in the MIMIC Code Repository.
+
+Table columns
+Name	Postgres data type
+itemid	INTEGER
+label	VARCHAR(50)
+fluid	VARCHAR(50)
+category	VARCHAR(50)
+Detailed Description
+itemid
+A unique identifier for a laboratory concept. itemid is unique to each row, and can be used to identify data in labevents associated with a specific concept.
+
+label
+The label column describes the concept which is represented by the itemid.
+
+fluid
+fluid describes the substance on which the measurement was made. For example, chemistry measurements are frequently performed on blood, which is listed in this column as ‘BLOOD’. Many of these measurements are also acquirable on other fluids, such as urine, and this column differentiates these distinct concepts.
+
+category
+category provides higher level information as to the type of measurement. For example, a category of ‘ABG’ indicates that the measurement is an arterial blood gas.
+
+/*********************************************************
+/*   07. diagnoses_icd
+/*********************************************************
+
+diagnoses_icd
+Billed ICD-9/ICD-10 diagnoses for hospitalizations.
+diagnoses_icd
+During routine hospital care, patients are billed by the hospital for diagnoses associated with their hospital stay. This table contains a record of all diagnoses a patient was billed for during their hospital stay using the ICD-9 and ICD-10 ontologies. Diagnoses are billed on hospital discharge, and are determined by trained persons who read signed clinical notes.
+
+Links to
+d_icd_diagnoses ON icd_code and icd_version
+Table columns
+Name	Postgres data type
+subject_id	INTEGER NOT NULL
+hadm_id	INTEGER NOT NULL
+seq_num	INTEGER NOT NULL
+icd_code	VARCHAR(7)
+icd_version	INTEGER
+Detailed Description
+subject_id
+subject_id is a unique identifier which specifies an individual patient. Any rows associated with a single subject_id pertain to the same individual.
+
+hadm_id
+hadm_id is an integer identifier which is unique for each patient hospitalization.
+
+seq_num
+The priority assigned to the diagnoses. The priority can be interpreted as a ranking of which diagnoses are “important”, but many caveats to this broad statement exist. For example, patients who are diagnosed with sepsis must have sepsis as their 2nd billed condition. The 1st billed condition must be the infectious agent. There’s also less importance placed on ranking low priority diagnoses “correctly” (as there may be no correct ordering of the priority of the 5th - 10th diagnosis codes, for example).
+
+icd_code, icd_version
+icd_code is the International Coding Definitions (ICD) code.
+
+There are two versions for this coding system: version 9 (ICD-9) and version 10 (ICD-10). These can be differentiated using the icd_version column. In general, ICD-10 codes are more detailed, though code mappings (or “cross-walks”) exist which convert ICD-9 codes to ICD-10 codes.
+
+Both ICD-9 and ICD-10 codes are often presented with a decimal. This decimal is not required for interpretation of an ICD code; i.e. the icd_code of ‘0010’ is equivalent to ‘001.0’.
+
+/*********************************************************
+/*   08. drgcodes
+/*********************************************************
+
+drgcodes
+Billed diagnosis related group (DRG) codes for hospitalizations.
+drgcodes
+Diagnosis related groups (DRGs) are used by the hospital to obtain reimbursement for a patient’s hospital stay. The codes correspond to the primary reason for a patient’s stay at the hospital.
+
+Table columns
+Name	Postgres data type
+subject_id	INTEGER
+hadm_id	INTEGER
+drg_type	VARCHAR(4)
+drg_code	VARCHAR(10)
+description	VARCHAR(195)
+drg_severity	SMALLINT
+drg_mortality	SMALLINT
+Detailed Description
+subject_id
+subject_id is a unique identifier which specifies an individual patient. Any rows associated with a single subject_id pertain to the same individual.
+
+hadm_id
+hadm_id is an integer identifier which is unique for each patient hospitalization.
+
+drg_type
+The specific DRG ontology used for the code.
+
+drg_code
+The DRG code.
+
+description
+A description for the given DRG code.
+
+drg_severity, drg_mortality
+Some DRG ontologies further qualify the patient severity of illness and likelihood of mortality, which are recorded here.
+
+/*********************************************************
+/*   09. emar
+/*********************************************************
+
+emar
+The Electronic Medicine Administration Record (eMAR); barcode scanning of medications at the time of administration.
+emar
+The EMAR table is used to record administrations of a given medicine to an individual patient. Records in this table are populated by bedside nursing staff scanning barcodes associated with the medicine and the patient.
+
+Links to
+emar_detail on emar_id
+pharmacy on pharmacy_id
+prescriptions on pharmacy_id
+poe on poe_id
+Important considerations
+The eMAR system was implemented during 2011-2013. As a result, eMAR data is not available for all patients.
+Table columns
+Name	Postgres data type
+subject_id	INTEGER NOT NULL
+hadm_id	INTEGER
+emar_id	VARCHAR(25) NOT NULL
+emar_seq	INTEGER NOT NULL
+poe_id	VARCHAR(25) NOT NULL
+pharmacy_id	INTEGER
+enter_provider_id	VARCHAR(10)
+charttime	TIMESTAMP NOT NULL
+medication	TEXT
+event_txt	VARCHAR(100)
+scheduletime	TIMESTAMP
+storetime	TIMESTAMP NOT NULL
+subject_id
+subject_id is a unique identifier which specifies an individual patient. Any rows associated with a single subject_id pertain to the same individual.
+
+hadm_id
+hadm_id is an integer identifier which is unique for each patient hospitalization.
+
+emar_id, emar_seq
+Identifiers for the eMAR table. emar_id is a unique identifier for each order made in eMAR. emar_seq is a consecutive integer which numbers eMAR orders chronologically. emar_id is composed of subject_id and emar_seq in the following pattern: ‘subject_id-emar_seq’.
+
+poe_id
+An identifier which links administrations in emar to orders in poe and prescriptions.
+
+pharmacy_id
+An identifier which links administrations in emar to pharmacy information in the pharmacy table.
+
+enter_provider_id
+enter_provider_id provides an anonymous identifier for the provider who entered the information into the eMAR system. Provider identifiers follow a consistent pattern: the letter “P”, followed by either three numbers, followed by two letters or two numbers. For example, “P003AB”, “P00102”, “P1248B”, etc. Provider identifiers are randomly generated and do not have any inherent meaning aside from uniquely identifying the same provider across the database.
+
+charttime
+The time at which the medication was administered.
+
+medication
+The name of the medication which was administered.
+
+event_txt
+Information about the administration. Most frequently event_txt is ‘Administered’, but other possible values are ‘Applied’, ‘Confirmed’, ‘Delayed’, ‘Not Given’, and so on.
+
+scheduletime
+If present, the time at which the administration was scheduled.
+
+storetime
+The time at which the administration was documented in the eMAR table.
+
+/*********************************************************
+/*   10. emar_detail
+/*********************************************************
+
+emar_detail
+Supplementary information for electronic administrations recorded in emar.
+emar_detail
+The emar_detail table contains information for each medicine administration made in the EMAR table. Information includes the associated pharmacy order, the dose due, the dose given, and many other parameters associated with the medical administration.
+
+Links to
+emar on emar_id
+pharmacy on pharmacy_id
+Important considerations
+The eMAR system was implemented during 2011-2013. As a result, eMAR data is not available for all patients.
+Table columns
+Name	Postgres data type
+subject_id	INTEGER NOT NULL
+emar_id	VARCHAR(25) NOT NULL
+emar_seq	INTEGER NOT NULL
+parent_field_ordinal	VARCHAR(10)
+administration_type	VARCHAR(50)
+pharmacy_id	INTEGER
+barcode_type	VARCHAR(4)
+reason_for_no_barcode	TEXT
+complete_dose_not_given	VARCHAR(5)
+dose_due	VARCHAR(100)
+dose_due_unit	VARCHAR(50)
+dose_given	VARCHAR(255)
+dose_given_unit	VARCHAR(50)
+will_remainder_of_dose_be_given	VARCHAR(5)
+product_amount_given	VARCHAR(30)
+product_unit	VARCHAR(30)
+product_code	VARCHAR(30)
+product_description	VARCHAR(255)
+product_description_other	VARCHAR(255)
+prior_infusion_rate	VARCHAR(40)
+infusion_rate	VARCHAR(40)
+infusion_rate_adjustment	VARCHAR(50)
+infusion_rate_adjustment_amount	VARCHAR(30)
+infusion_rate_unit	VARCHAR(30)
+route	VARCHAR(10)
+infusion_complete	VARCHAR(1)
+completion_interval	VARCHAR(50)
+new_iv_bag_hung	VARCHAR(1)
+continued_infusion_in_other_location	VARCHAR(1)
+restart_interval	TEXT
+side	VARCHAR(10)
+site	VARCHAR(255)
+non_formulary_visual_verification	VARCHAR(1)
+subject_id
+subject_id is a unique identifier which specifies an individual patient. Any rows associated with a single subject_id pertain to the same individual.
+
+emar_id, emar_seq
+Identifiers for the eMAR table. emar_id is a unique identifier for each order made in eMAR. emar_seq is a consecutive integer which numbers eMAR orders chronologically. emar_id is composed of subject_id and emar_seq in the following pattern: ‘subject_id-emar_seq’.
+
+parent_field_ordinal
+parent_field_ordinal delineates multiple administrations for the same eMar event, e.g. multiple formulary doses for the full dose. As eMAR requires the administrating provider to scan a barcode for each formulary provided to the patient, it is often the case that multiple rows in emar_detail correspond to a single row in emar (e.g. multiple pills are administered which add up to the desired dose). The structure for emar_detail rows is as follows:
+
+There is one row per eMAR order with a NULL parent_field_ordinal: this row usually contains the desired dose for the administration.
+Afterward, if there are N formulary doses, parent_field_ordinal will take values ‘1.1’, ‘1.2’, …, ‘1.N’.
+The most common case occurs when there is only one formulary dose per medication. In this case the emar_id will have two rows in the emar_detail table: one with a NULL value for parent_field_ordinal (usually providing the dose due), and one row with a value of ‘1.1’ for parent_field_ordinal (usually providing the actual dose administered).
+
+administration_type
+The type of administration, including ‘IV Bolus’, ‘IV Infusion’, ‘Medication Infusion’, ‘Transdermal Patch’, and so on.
+
+pharmacy_id
+An identifier which allows linking the eMAR order to pharmacy information provided in the pharmacy table. Note: rarely the same emar_id may have multiple distinct pharmacy_id across rows in the emar_detail table.
+
+Remaining columns
+The remaining columns provide information about the delivery of the formulary dose of the administered medication.
+
+/*********************************************************
+/*   11. hcpcsevents
+/*********************************************************
+
+hpcsevents
+Billed events occurring during the hospitalization. Includes CPT codes.
+hcpcsevents
+Links to
+d_hcpcs on hcpcs_cd
+Table columns
+Name	Postgres data type
+subject_id	INTEGER NOT NULL
+hadm_id	INTEGER NOT NULL
+chartdate	DATE
+hcpcs_cd	CHAR(5) NOT NULL
+seq_num	INTEGER NOT NULL
+short_description	VARCHAR(180)
+subject_id
+subject_id is a unique identifier which specifies an individual patient. Any rows associated with a single subject_id pertain to the same individual.
+
+hadm_id
+hadm_id is an integer identifier which is unique for each patient hospitalization.
+
+chartdate
+The date associated with the coded event.
+
+hcpcs_cd
+A five character code which uniquely represents the event. Link this to code in d_hcpcs for a longer description of the code.
+
+seq_num
+An assigned order to HCPCS codes for an individual hospitalization. This order sometimes conveys meaning, e.g. sometimes higher priority, but this is not guaranteed across all codes.
+
+short_description
+A short textual descriptions of the hcpcs_cd listed for the given row.
+
+/*********************************************************
+/*   12. labevents
+/*********************************************************
+
+labevents
+Laboratory measurements sourced from patient derived specimens.
+labevents
+The labevents table stores the results of all laboratory measurements made for a single patient. These include hematology measurements, blood gases, chemistry panels, and less common tests such as genetic assays.
+
+Links to
+d_labitems on itemid
+Important considerations
+hadm_id is assigned to labs close to the hospital stay using the transfers table. However this does not always perfectly capture labs proximal to the hospital stay. To be specific, as of v2.1, it is possible to assign 59,327,830 observations with an hadm_id using a join to admissions withsubject_id, admittime, and dischtime. However, only 58,131,956 (98%) of these observations have an hadm_id actually stored in the labevents table. Users wishing to ensure capture of labs proximal to hospital stays should be aware of this, and use joins with time as necessary.
+
+The following conditions must occur in order for this data to not have an hadm_id in the table:
+
+the lab observation must fall outside of a row in transfers
+the lab observation must not have an associated ED stay identifier
+Table columns
+Name	Postgres data type
+labevent_id	INTEGER NOT NULL
+subject_id	INTEGER NOT NULL
+hadm_id	INTEGER
+specimen_id	INTEGER NOT NULL
+itemid	INTEGER NOT NULL
+order_provider_id	VARCHAR(10)
+charttime	TIMESTAMP(0)
+storetime	TIMESTAMP(0)
+value	VARCHAR(200)
+valuenum	DOUBLE PRECISION
+valueuom	VARCHAR(20)
+ref_range_lower	DOUBLE PRECISION
+ref_range_upper	DOUBLE PRECISION
+flag	VARCHAR(10)
+priority	VARCHAR(7)
+comments	TEXT
+labevent_id
+An integer which is unique for every row in the table.
+
+subject_id
+subject_id is a unique identifier which specifies an individual patient. Any rows associated with a single subject_id pertain to the same individual.
+
+hadm_id
+hadm_id is an integer identifier which is unique for each patient hospitalization.
+
+specimen_id
+Uniquely denoted the specimen from which the lab measurement was made. Most lab measurements are made on patient derived samples (specimens) such as blood, urine, and so on. Often multiple measurements are made on the same sample. The specimen_id will group measurements made on the same sample, e.g. blood gas measurements made on the same sample of blood.
+
+itemid
+An identifier which uniquely denotes laboratory concepts.
+
+order_provider_id
+order_provider_id provides an anonymous identifier for the provider who ordered the laboratory measurement. Provider identifiers follow a consistent pattern: the letter “P”, followed by either three numbers, followed by two letters or two numbers. For example, “P003AB”, “P00102”, “P1248B”, etc. Provider identifiers are randomly generated and do not have any inherent meaning aside from uniquely identifying the same provider across the database.
+
+charttime
+The time at which the laboratory measurement was charted. This is usually the time at which the specimen was acquired, and is usually significantly earlier than the time at which the measurement is available.
+
+storetime
+The time at which the measurement was made available in the laboratory system. This is when the information would have been available to care providers.
+
+value, valuenum
+The result of the laboratory measurement and, if it is numeric, the value cast as a numeric data type.
+
+valueuom
+The unit of measurement for the laboratory concept.
+
+ref_range_lower, ref_range_upper
+Upper and lower reference ranges indicating the normal range for the laboratory measurements. Values outside the reference ranges are considered abnormal.
+
+flag
+A brief string mainly used to indicate if the laboratory measurement is abnormal.
+
+priority
+The priority of the laboratory measurement: either routine or stat (urgent).
+
+comments
+Deidentified free-text comments associated with the laboratory measurement. Usually these provide information about the sample, whether any notifications were made to care providers regarding the results, considerations for interpretation, or in some cases the comments contain the result of the laboratory itself. Comments which have been fully deidentified (i.e. no information content retained) are present as three underscores: ___. A NULL comment indicates no comment was made for the row.
+
+/*********************************************************
+/*   13. microbiologyevents
+/*********************************************************
+
+microbiologyevents
+Microbiology cultures.
+microbiologyevents
+Microbiology tests are a common procedure to check for infectious growth and to assess which antibiotic treatments are most effective.
+
+The table is best explained with a demonstrative example. If a blood culture is requested for a patient, then a blood sample will be taken and sent to the microbiology lab. The time at which this blood sample is taken is the charttime. The spec_type_desc will indicate that this is a blood sample. Bacteria will be cultured on the blood sample, and the remaining columns depend on the outcome of this growth:
+
+If no growth is found, the remaining columns will be NULL
+If bacteria is found, then each organism of bacteria will be present in org_name, resulting in multiple rows for the single specimen (i.e. multiple rows for the given spec_type_desc).
+If antibiotics are tested on a given bacterial organism, then each antibiotic tested will be present in the ab_name column (i.e. multiple rows for the given org_name associated with the given spec_type_desc). Antibiotic parameters and sensitivities are present in the remaining columns (dilution_text, dilution_comparison, dilution_value, interpretation).
+Important considerations
+Typically, negative values are indicated by a NULL value. However, itemid 90856 has a value of “NEGATIVE”, and should be included in queries which seek to segregate microbiology data based on positive/negative findings.
+
+hadm_id is assigned to observations using the administrative transfer table. However this does not always perfectly capture labs around the hospital stay. To be specific, as of v2.1, it is possible to assign 1,449,547 observations with an hadm_id using a join to admissions with subject_id, admittime, and dischtime. However, only 1,396,224 (96%) of these observations have an hadm_id actually stored in the microbiologyevents table. Users wishing to ensure capture of labs proximal to hospital stays should be aware of this, and use joins with time as necessary.
+
+Table columns
+Name	Postgres data type	Example value
+microevent_id	INTEGER NOT NULL	1234567
+subject_id	INTEGER NOT NULL	12078372
+hadm_id	INTEGER	29450599
+micro_specimen_id	INTEGER NOT NULL	6386644
+order_provider_id	VARCHAR(10)	P12ABC
+chartdate	TIMESTAMP(0) NOT NULL	2130-04-01 00:00:00
+charttime	TIMESTAMP(0)	2130-04-01 16:00:00
+spec_itemid	INTEGER NOT NULL	70012
+spec_type_desc	VARCHAR(100) NOT NULL	BLOOD CULTURE
+test_seq	INTEGER NOT NULL	2
+storedate	TIMESTAMP(0)	2130-04-05 00:00:00
+storetime	TIMESTAMP(0)	2130-04-05 14:46:00
+test_itemid	INTEGER	90117
+test_name	VARCHAR(100)	ANAEROBIC BOTTLE
+org_itemid	INTEGER	80155
+org_name	VARCHAR(100)	STAPHYLOCOCCUS, COAGULASE NEGATIVE
+isolate_num	SMALLINT	1
+quantity	VARCHAR(50)	
+ab_itemid	INTEGER	90025
+ab_name	VARCHAR(30)	LEVOFLOXACIN
+dilution_text	VARCHAR(10)	<=0.12
+dilution_comparison	VARCHAR(20)	<=
+dilution_value	DOUBLE PRECISION	0.12
+interpretation	VARCHAR(5)	S
+comments	TEXT	___
+microevent_id
+A unique integer denoting the row.
+
+subject_id
+subject_id is a unique identifier which specifies an individual patient. Any rows associated with a single subject_id pertain to the same individual.
+
+hadm_id
+hadm_id is an integer identifier which is unique for each patient hospitalization.
+
+micro_specimen_id
+Uniquely denoted the specimen from which the microbiology measurement was made. Most microbiology measurements are made on patient derived samples (specimens) such as blood, urine, and so on. Often multiple measurements are made on the same sample. The micro_specimen_id will group measurements made on the same sample, e.g. organisms which grew from the same blood sample.
+
+order_provider_id
+order_provider_id provides an anonymous identifier for the provider who ordered the microbiology test. Provider identifiers follow a consistent pattern: the letter “P”, followed by either three numbers, followed by two letters or two numbers. For example, “P003AB”, “P00102”, “P1248B”, etc. Provider identifiers are randomly generated and do not have any inherent meaning aside from uniquely identifying the same provider across the database.
+
+chartdate, charttime
+charttime records the time at which an observation was charted, and is usually the closest proxy to the time the data was actually measured. chartdate is the same as charttime, except there is no time available.
+
+chartdate was included as time information is not always available for microbiology measurements: in order to be clear about when this occurs, charttime is null, and chartdate contains the date of the measurement.
+
+In the cases where both charttime and chartdate exists, chartdate is equal to a truncated version of charttime (i.e. charttime without the timing information). Not all observations have a charttime, but all observations have a chartdate.
+
+spec_itemid, spec_type_desc
+The specimen which is tested for bacterial growth. The specimen is a sample derived from a patient; e.g. blood, urine, sputum, etc.
+
+test_seq
+If multiple samples are drawn, the test_seq will delineate them. For example, if an aerobic and anerobic culture bottle are used for the same specimen, they will have distinct test_seq values (likely 1 and 2).
+
+storedate, storetime
+The date (storedate) or date and time (storetime) of when the microbiology result was available. While many interim results are made available during the process of assessing a microbiology culture, the times here are the time of the last known update.
+
+test_itemid, test_name
+The test performed on the given specimen.
+
+org_itemid, org_name
+The organism, if any, which grew when tested. If NULL, no organism grew (i.e. a negative culture).
+
+isolate_num
+For testing antibiotics, the isolated colony (integer; starts at 1).
+
+ab_itemid, ab_name
+If an antibiotic was tested against the given organism for sensitivity, the antibiotic is listed here.
+
+dilution_text, dilution_comparison, dilution_value
+Dilution values when testing antibiotic sensitivity.
+
+interpretation
+interpretation of the antibiotic sensitivity, and indicates the results of the test. “S” is sensitive, “R” is resistant, “I” is intermediate, and “P” is pending.
+
+comments
+Deidentified free-text comments associated with the microbiology measurement. Usually these provide information about the sample, whether any notifications were made to care providers regarding the results, considerations for interpretation, or in some cases the comments contain the result of the measurement itself. Comments which have been fully deidentified (i.e. no information content retained) are present as three underscores: ___. A NULL comment indicates no comment was made for the row.
+
+/*********************************************************
+/*   14. patients
+/*********************************************************
+
+patients table
+Patients' gender, age, and date of death if information exists.
+Information that is consistent for the lifetime of a patient is stored in this table.
+
+Table columns
+Name	Postgres data type
+subject_id	INTEGER NOT NULL
+gender	VARCHAR(1) NOT NULL
+anchor_age	INTEGER NOT NULL
+anchor_year	INTEGER NOT NULL
+anchor_year_group	VARCHAR(255) NOT NULL
+dod	TIMESTAMP(0)
+Detailed Description
+subject_id
+subject_id is a unique identifier which specifies an individual patient. Any rows associated with a single subject_id pertain to the same individual. As subject_id is the primary key for the table, it is unique for each row.
+
+gender
+gender is the genotypical sex of the patient.
+
+anchor_age, anchor_year, anchor_year_group
+These columns provide information regarding the actual patient year for the patient admission, and the patient’s age at that time.
+
+anchor_year is a shifted year for the patient.
+anchor_year_group is a range of years - the patient’s anchor_year occurred during this range.
+anchor_age is the patient’s age in the anchor_year. If a patient’s anchor_age is over 89 in the anchor_year then their anchor_age is set to 91, regardless of how old they actually were.
+Example: a patient has an anchor_year of 2153, anchor_year_group of 2008 - 2010, and an anchor_age of 60.
+The year 2153 for the patient corresponds to 2008, 2009, or 2010.
+The patient was 60 in the shifted year of 2153, i.e. they were 60 in 2008, 2009, or 2010.
+A patient admission in 2154 will occur in 2009-2011, an admission in 2155 will occur in 2010-2012, and so on.
+dod
+The de-identified date of death for the patient. Date of death is extracted from two sources: the hospital information system and the Massachusetts State Registry of Vital Records and Statistics. Individual patient records from MIMIC were matched to the vital records using a custom algorithm based on identifiers including name, social security number, and date of birth.
+
+As a result of the linkage, out of hospital mortality is available for MIMIC-IV patients up to one year post-hospital discharge. All patient deaths occurring more than one year after hospital discharge are censored. Survival studies should incorporate this into their design.
+
+/*********************************************************
+/*   15. pharmacy
+/*********************************************************
+
+pharmacy
+Formulary, dosing, and other information for prescribed medications.
+pharmacy
+The pharmacy table provides detailed information regarding filled medications which were prescribed to the patient. Pharmacy information includes the dose of the drug, the number of formulary doses, the frequency of dosing, the medication route, and the duration of the prescription.
+
+Links to
+poe on poe_id
+prescriptions on pharmacy_id
+emar on pharmacy_id
+Table columns
+Name	Postgres data type
+subject_id	INTEGER NOT NULL
+hadm_id	INTEGER NOT NULL
+pharmacy_id	INTEGER NOT NULL
+poe_id	VARCHAR(25)
+starttime	TIMESTAMP(3)
+stoptime	TIMESTAMP(3)
+medication	TEXT
+proc_type	VARCHAR(50) NOT NULL
+status	VARCHAR(50)
+entertime	TIMESTAMP(3) NOT NULL
+verifiedtime	TIMESTAMP(3)
+route	VARCHAR(50)
+frequency	VARCHAR(50)
+disp_sched	VARCHAR(255)
+infusion_type	VARCHAR(15)
+sliding_scale	VARCHAR(1)
+lockout_interval	VARCHAR(50)
+basal_rate	REAL
+one_hr_max	VARCHAR(10)
+doses_per_24_hrs	REAL
+duration	REAL
+duration_interval	VARCHAR(50)
+expiration_value	INTEGER
+expiration_unit	VARCHAR(50)
+expirationdate	TIMESTAMP(3)
+dispensation	VARCHAR(50)
+fill_quantity	VARCHAR(50)
+subject_id
+subject_id is a unique identifier which specifies an individual patient. Any rows associated with a single subject_id pertain to the same individual.
+
+hadm_id
+hadm_id is an integer identifier which is unique for each patient hospitalization.
+
+pharmacy_id
+A unique identifier for the given pharmacy entry. Each row of the pharmacy table has a unique pharmacy_id. This identifier can be used to link the pharmacy information to the provider order (in poe or prescriptions) or to the administration of the medication (in emar).
+
+poe_id
+A foreign key which links to the provider order entry order in the prescriptions table associated with this pharmacy record.
+
+starttime, stoptime
+The start and stop times for the given prescribed medication.
+
+medication
+The name of the medication provided.
+
+proc_type
+The type of order: “IV Piggyback”, “Non-formulary”, “Unit Dose”, and so on.
+
+status
+Whether the prescription is active, inactive, or discontinued.
+
+entertime
+The date and time at which the prescription was entered into the pharmacy system.
+
+verifiedtime
+The date and time at which the prescription was verified by a physician.
+
+route
+The intended route of administration for the prescription.
+
+frequency
+The frequency at which the medication should be administered to the patient. Many commonly used short hands are used in the frequency column. Q# indicates every # hours; e.g. “Q6” or “Q6H” is every 6 hours.
+
+disp_sched
+The hours of the day at which the medication should be administered, e.g. “08, 20” would indicate the medication should be administered at 8:00 AM and 8:00 PM, respectively.
+
+infusion_type
+A coded letter describing the type of infusion: ‘B’, ‘C’, ‘N’, ‘N1’, ‘O’, or ‘R’.
+
+sliding_scale
+Indicates whether the medication should be given on a sliding scale: either ‘Y’ or ‘N’.
+
+lockout_interval
+The time the patient must wait until providing themselves with another dose; often used with patient controlled analgesia.
+
+basal_rate
+The rate at which the medication is given over 24 hours.
+
+one_hr_max
+The maximum dose that may be given in a single hour.
+
+doses_per_24_hrs
+The number of expected doses per 24 hours. Note that this column can be misleading for continuously infused medications as they are usually only “dosed” once per day, despite continuous administration.
+
+duration, duration_interval
+duration is the numeric duration of the given dose, while duration_interval can be considered as the unit of measurement for the given duration. For example, often duration is 1 and duration_interval is “Doses”. Alternatively, duration could be 8 and the duration_interval could be “Weeks”.
+
+expiration_value, expiration_unit, expirationdate
+If the drug has a relevant expiry date, these columns detail when this occurs. expiration_value and expiration_unit provide a length of time until the drug expires, e.g. 30 days, 72 hours, and so on. expirationdate provides the deidentified date of expiry.
+
+dispensation
+The source of dispensation for the medication.
+
+fill_quantity
+What proportion of the formulary to fill.
+
+/*********************************************************
+/*   16. poe
+/*********************************************************
+
+poe
+Orders made by providers relating to patient care.
+poe
+Provider order entry (POE) is the general interface through which care providers at the hospital enter orders. Most treatments and procedures must be ordered via POE.
+
+Links to
+poe_detail on poe_id
+Table columns
+Name	Postgres data type
+poe_id	VARCHAR(25) NOT NULL
+poe_seq	INTEGER NOT NULL
+subject_id	INTEGER NOT NULL
+hadm_id	INTEGER
+ordertime	TIMESTAMP(0) NOT NULL
+order_type	VARCHAR(25) NOT NULL
+order_subtype	VARCHAR(50)
+transaction_type	VARCHAR(15)
+discontinue_of_poe_id	VARCHAR(25)
+discontinued_by_poe_id	VARCHAR(25)
+order_provider_id	VARCHAR(10)
+order_status	VARCHAR(15)
+poe_id
+A unique identifier for the given order. poe_id is composed of subject_id and a monotonically increasing integer, poe_seq, in the following format: subject_id-poe_seq.
+
+poe_seq
+A monotonically increasing integer which chronologically sorts the POE orders. That is, POE orders can be ordered sequentially by poe_seq.
+
+subject_id
+subject_id is a unique identifier which specifies an individual patient. Any rows associated with a single subject_id pertain to the same individual.
+
+hadm_id
+hadm_id is an integer identifier which is unique for each patient hospitalization.
+
+ordertime
+The date and time at which the provider order was made.
+
+order_type
+The type of provider order. One of the following:
+
+ADT orders
+Blood Bank
+Cardiology
+Consults
+Critical Care
+General Care
+Hemodialysis
+IV therapy
+Lab
+Medications
+Neurology
+Nutrition
+OB
+Radiology
+Respiratory
+TPN
+order_subtype
+Further detail on the type of order made by the provider. The order_subtype is best interpreted alongside the order_type, e.g. order_type: 'Cardiology' with order_subtype: 'Holter Monitor'.
+
+transaction_type
+The action which the provider performed when performing this order. One of the following:
+
+Change
+Co
+D/C
+H
+New
+T
+discontinue_of_poe_id, discontinued_by_poe_id
+If this order discontinues a previous order, then discontinue_of_poe_id will link to the previous order which was discontinued. Conversely, if this order was later discontinued by a distinct order, then discontinued_by_poe_id will link to that future order.
+
+order_provider_id
+order_provider_id provides an anonymous identifier for the provider who made the order. Provider identifiers follow a consistent pattern: the letter “P”, followed by either three numbers, followed by two letters or two numbers. For example, “P003AB”, “P00102”, “P1248B”, etc. Provider identifiers are randomly generated and do not have any inherent meaning aside from uniquely identifying the same provider across the database.
+
+order_status
+Whether the order is still active (‘Active’) or whether it has been inactivated (‘Inactive’).
+
+/*********************************************************
+/*   17. poe_detail
+/*********************************************************
+
+poe_detail
+Supplementary information for orders made by providers in the hospital.
+poe_detail
+The poe_detail table provides further information on POE orders. The table uses an Entity-Attribute-Value (EAV) model: the entity is poe_id, the attribute is field_name, and the value is field_value. EAV tables allow for flexible description of entities when the attributes are heterogenous.
+
+Links to
+poe_detail on poe_id
+Table columns
+Name	Postgres data type
+poe_id	VARCHAR(25) NOT NULL
+poe_seq	INTEGER NOT NULL
+subject_id	INTEGER NOT NULL
+field_name	VARCHAR(255) NOT NULL
+field_value	TEXT
+poe_id
+A unique identifier for the given order. poe_id is composed of subject_id and a monotonically increasing integer, poe_seq, in the following format: subject_id-poe_seq.
+
+poe_seq
+A monotonically increasing integer which chronologically sorts the POE orders. That is, POE orders can be ordered sequentially by poe_seq.
+
+subject_id
+subject_id is a unique identifier which specifies an individual patient. Any rows associated with a single subject_id pertain to the same individual.
+
+field_name
+Each row provides detail regarding a particular aspect of a POE order. field_name is the name given to that aspect. As of MIMIC-IV v2.2, the following table lists the possible values and the most common entry for it in field_value.
+
+field_name	number of rows	most frequent field_value observation
+Admit to	881522	Medicine
+Indication	27190	Antibiotics
+Code status	197932	Resuscitate (Full code)
+Transfer to	161707	Medicine
+Admit category	1093726	Admit to inpatient
+Consult Status	36591	Accepted
+Discharge When	431642	Discharge Now
+Level of Urgency	45617	Routine (within 24 hours)
+Discharge Planning	475428	Finalized
+Consult Status Time	36591	2149-12-03 09:00:01
+Tubes & Drains type	491472	Indwelling urinary catheter (IUC) - Foley
+field_value
+field_value is the value associated with the given POE order and field_name. For example, for the field_name of ‘Admit to’, the field_value column contains the type of unit the patient was admitted to (Psychiatry, GYN, and so on).
+
+/*********************************************************
+/*   18. prescriptions
+/*********************************************************
+
+prescriptions
+Prescribed medications.
+prescriptions
+The prescriptions table provides information about prescribed medications. Information includes the name of the drug, coded identifiers including the Generic Sequence Number (GSN) and National Drug Code (NDC), the product strength, the formulary dose, and the route of administration.
+
+Links to
+pharmacy on pharmacy_id
+emar on pharmacy_id
+Table columns
+Name	Postgres data type
+subject_id	INTEGER NOT NULL
+hadm_id	INTEGER NOT NULL
+pharmacy_id	INTEGER NOT NULL
+poe_id	VARCHAR(25)
+poe_seq	INTEGER
+order_provider_id	VARCHAR(10)
+starttime	TIMESTAMP(3)
+stoptime	TIMESTAMP(3)
+drug_type	VARCHAR(20) NOT NULL
+drug	VARCHAR(255) NOT NULL
+formulary_drug_cd	VARCHAR(50)
+gsn	VARCHAR(255)
+ndc	VARCHAR(25)
+prod_strength	VARCHAR(255)
+form_rx	VARCHAR(25)
+dose_val_rx	VARCHAR(100)
+dose_unit_rx	VARCHAR(50)
+form_val_disp	VARCHAR(50)
+form_unit_disp	VARCHAR(50)
+doses_per_24_hrs	REAL
+route	VARCHAR(50)
+subject_id
+subject_id is a unique identifier which specifies an individual patient. Any rows associated with a single subject_id pertain to the same individual.
+
+hadm_id
+hadm_id is an integer identifier which is unique for each patient hospitalization.
+
+pharmacy_id
+An identifier which links administrations in emar to pharmacy information in the pharmacy table.
+
+poe_id, poe_seq
+These columns allow linking prescriptions to associated orders in the poe table.
+
+order_provider_id
+order_provider_id provides an anonymous identifier for the provider who initiated the order. Provider identifiers follow a consistent pattern: the letter “P”, followed by either three numbers, followed by two letters or two numbers. For example, “P003AB”, “P00102”, “P1248B”, etc. Provider identifiers are randomly generated and do not have any inherent meaning aside from uniquely identifying the same provider across the database.
+
+starttime, stoptime
+The prescribed start and stop time for the medication.
+
+drug_type
+The component of the prescription which the drug occupies. Can be one of ‘MAIN’, ‘BASE’, or ‘ADDITIVE’.
+
+drug
+A free-text description of the medication administered.
+
+formulary_drug_cd
+A hospital specific ontology used to order drugs from the formulary.
+
+gsn
+The Generic Sequence Number (GSN), a coded identifier used for medications.
+
+ndc
+The National Drug Code (NDC), a coded identifier which uniquely identifiers medications.
+
+prod_strength
+A free-text description of the composition of the prescribed medication (e.g. ‘12 mg / 0.8 mL Oral Syringe’, ‘12.5mg Tablet’, etc).
+
+form_rx
+The container in which the formulary dose is delivered (e.g. ‘TABLET’, ‘VIAL’, etc).
+
+dose_val_rx
+The prescribed dose for the patient intended to be administered over the given time period.
+
+dose_unit_rx
+The unit of measurement for the dose.
+
+form_val_disp
+The amount of the medication which is contained in a single formulary dose.
+
+form_unit_disp
+The unit of measurement used for the formulary dosage.
+
+doses_per_24_hrs
+The number of doses per 24 hours for which the medication is to be given. A daily dose would result in doses_per_24_hrs: 1, bidaily (BID) would be 2, and so on.
+
+route
+The route of administration for the medication.
+
+/*********************************************************
+/*   19. procedures_icd
+/*********************************************************
+
+procedures_icd
+Billed procedures for patients during their hospital stay.
+procedures_icd
+During routine hospital care, patients are billed by the hospital for procedures they undergo. This table contains a record of all procedures a patient was billed for during their hospital stay using the ICD-9 and ICD-10 ontologies.
+
+Links to
+d_icd_procedures on icd_code and icd_version
+Important considerations
+Procedures during the hospital stay can be billed (1) by the hospital or (2) by the provider. This table contains only procedures billed by the hospital.
+Table columns
+Name	Postgres data type
+subject_id	INTEGER NOT NULL
+hadm_id	INTEGER NOT NULL
+seq_num	INTEGER NOT NULL
+chartdate	DATE NOT NULL
+icd_code	VARCHAR(7)
+icd_version	INTEGER
+subject_id
+subject_id is a unique identifier which specifies an individual patient. Any rows associated with a single subject_id pertain to the same individual.
+
+hadm_id
+hadm_id is an integer identifier which is unique for each patient hospitalization.
+
+seq_num
+An assigned priority for procedures which occurred within the hospital stay.
+
+chartdate
+The date of the associated procedures. Date does not strictly correlate with seq_num.
+
+icd_code, icd_version
+icd_code is the International Coding Definitions (ICD) code.
+
+There are two versions for this coding system: version 9 (ICD-9) and version 10 (ICD-10). These can be differentiated using the icd_version column. In general, ICD-10 codes are more detailed, though code mappings (or “cross-walks”) exist which convert ICD-9 codes to ICD-10 codes.
+
+Both ICD-9 and ICD-10 codes are often presented with a decimal. This decimal is not required for interpretation of an ICD code; i.e. the icd_code of ‘0010’ is equivalent to ‘001.0’.
+
+/*********************************************************
+/*   20. services
+/*********************************************************
+
+services
+The hospital service(s) which cared for the patient during their hospitalization.
+services
+The services table describes the service that a patient was admitted under. While a patient can be physicially located at a given ICU type (say MICU), they are not necessarily being cared for by the team which staffs the MICU. This can happen due to a number of reasons, including bed shortage. The services table should be used if interested in identifying the type of service a patient is receiving in the hospital. For example, if interested in identifying surgical patients, the recommended method is searching for patients admitted under a surgical service.
+
+Each service is listed in the table as an abbreviation - this is exactly how the data is stored in the hospital database. For user convenience, we have provided a description of each service type.
+
+Service	Description
+CMED	Cardiac Medical - for non-surgical cardiac related admissions
+CSURG	Cardiac Surgery - for surgical cardiac admissions
+DENT	Dental - for dental/jaw related admissions
+ENT	Ear, nose, and throat - conditions primarily affecting these areas
+EYE	Eye diseases - including subspecialty services in glaucoma, cataract surgery, cornea and external diseases, and neuro-ophthalmology.
+GU	Genitourinary - reproductive organs/urinary system
+GYN	Gynecological - female reproductive systems and breasts
+MED	Medical - general service for internal medicine
+NB	Newborn - infants born at the hospital
+NBB	Newborn baby - infants born at the hospital
+NMED	Neurologic Medical - non-surgical, relating to the brain
+NSURG	Neurologic Surgical - surgical, relating to the brain
+OBS	Obstetrics - conerned with childbirth and the care of women giving birth
+ORTHO	Orthopaedic - surgical, relating to the musculoskeletal system
+OMED	Oncologic Medical - non-surgical, relating to cancer
+PSURG	Plastic - restortation/reconstruction of the human body (including cosmetic or aesthetic)
+PSYCH	Psychiatric - mental disorders relating to mood, behaviour, cognition, or perceptions
+SURG	Surgical - general surgical service not classified elsewhere
+TRAUM	Trauma - injury or damage caused by physical harm from an external source
+TSURG	Thoracic Surgical - surgery on the thorax, located between the neck and the abdomen
+VSURG	Vascular Surgical - surgery relating to the circulatory system
+Links to
+patients on subject_id
+admissions on hadm_id
+Table columns
+Name	Postgres data type
+subject_id	INT
+hadm_id	INT
+transfertime	TIMESTAMP(0)
+prev_service	VARCHAR(20)
+curr_service	VARCHAR(20)
+subject_id
+subject_id is a unique identifier which specifies an individual patient. Any rows associated with a single subject_id pertain to the same individual.
+
+hadm_id
+hadm_id is an integer identifier which is unique for each patient hospitalization.
+
+transfertime
+transfertime is the time at which the patient moved from the prev_service (if present) to the curr_service.
+
+prev_service, curr_service
+prev_service and curr_service are the previous and current service that the patient resides under.
+
+/*********************************************************
+/*   21. transfers
+/*********************************************************
+
+transfers table
+Detailed information about patients' unit transfers.
+transfers
+Physical locations for patients throughout their hospital stay.
+
+Links to
+patients on subject_id
+admissions on hadm_id
+Important considerations
+The icustays table is derived from this table.
+Table columns
+Name	Postgres data type
+subject_id	INTEGER NOT NULL
+hadm_id	INTEGER
+transfer_id	INTEGER NOT NULL
+eventtype	VARCHAR(10)
+careunit	VARCHAR(255)
+intime	TIMESTAMP(0)
+outtime	TIMESTAMP(0)
+Detailed Description
+subject_id, hadm_id, transfer_id
+Identifiers which specify the patient: subject_id is unique to a patient, hadm_id is unique to a patient hospital stay, and transfer_id is unique to a patient physical location.
+
+Note that stay_id present in the icustays and edstays tables is derived from transfer_id. For example, three contiguous ICU stays will have three separate transfer_id for each distinct physical location (e.g. a patient could move from one bed to another). The entire stay will have a single stay_id, whih will be equal to the transfer_id of the first physical location.
+
+eventtype
+eventtype describes what transfer event occurred: ‘ed’ for an emergency department stay, ‘admit’ for an admission to the hospital, ‘transfer’ for an intra-hospital transfer and ‘discharge’ for a discharge from the hospital.
+
+careunit
+The type of unit or ward in which the patient is physically located. Examples of care units include medical ICUs, surgical ICUs, medical wards, new baby nurseries, and so on.
+
+intime, outtime
+intime provides the date and time the patient was transferred into the current care unit (careunit) from the previous care unit. outtime provides the date and time the patient was transferred out of the current physical location.
+
+
+/*********************************************************
+/*********************************************************
+/*********************************************************
+/*   21. DBML
+/*********************************************************
+/*********************************************************
+/*********************************************************
+
+// MIMIC-IV v2.2 (subset) — DBML for dbdiagram.io
+// Includes: patients, omr, provider, admissions, d_hcpcs, hcpcsevents,
+// d_icd_diagnoses, diagnoses_icd, d_icd_procedures, procedures_icd,
+// d_labitems, labevents, microbiologyevents, drgcodes,
+// poe, poe_detail, pharmacy, prescriptions, emar, emar_detail, services, transfers
+
+// --------------------------------------------------
+// 14. patients
+// --------------------------------------------------
+Table patients {
+  subject_id integer [pk, not null]
+  gender varchar(1) [not null]
+  anchor_age integer [not null]
+  anchor_year integer [not null]
+  anchor_year_group varchar(255) [not null]
+  dod timestamp
+}
+
+// --------------------------------------------------
+// 00. omr
+// --------------------------------------------------
+Table omr {
+  subject_id integer [not null]
+  chartdate date [not null]
+  seq_num integer [not null]
+  result_name varchar(100) [not null]
+  result_value text [not null]
+
+  indexes {
+    (subject_id, chartdate, seq_num) [pk]
+  }
+}
+
+// --------------------------------------------------
+// 01. provider
+// --------------------------------------------------
+Table provider {
+  provider_id varchar(10) [pk, not null, note: "Pattern like P003AB, P00102. Random deidentified identifier."]
+}
+
+// --------------------------------------------------
+// 02. admissions
+// --------------------------------------------------
+Table admissions {
+  subject_id integer [not null]
+  hadm_id integer [pk, not null]
+
+  admittime timestamp [not null]
+  dischtime timestamp
+  deathtime timestamp
+
+  admission_type varchar(40) [not null]
+  admit_provider_id varchar(10)
+
+  admission_location varchar(60)
+  discharge_location varchar(60)
+  insurance varchar(255)
+  language varchar(10)
+  marital_status varchar(30)
+  race varchar(80)
+
+  edregtime timestamp
+  edouttime timestamp
+
+  hospital_expire_flag smallint
+}
+
+// --------------------------------------------------
+// 03. d_hcpcs
+// --------------------------------------------------
+Table d_hcpcs {
+  code char(5) [pk, not null]
+  category smallint
+  long_description text
+  short_description varchar(180)
+}
+
+// --------------------------------------------------
+// 11. hcpcsevents  (typo in your text: hpcsevents -> hcpcsevents)
+// --------------------------------------------------
+Table hcpcsevents {
+  subject_id integer [not null]
+  hadm_id integer [not null]
+  chartdate date
+  hcpcs_cd char(5) [not null]
+  seq_num integer [not null]
+  short_description varchar(180)
+
+  indexes {
+    (hadm_id, seq_num) [pk]
+  }
+}
+
+// --------------------------------------------------
+// 04. d_icd_diagnoses
+// --------------------------------------------------
+Table d_icd_diagnoses {
+  icd_code char(7) [not null]
+  icd_version integer [not null]
+  long_title varchar(255)
+
+  indexes {
+    (icd_code, icd_version) [pk]
+  }
+}
+
+// --------------------------------------------------
+// 07. diagnoses_icd
+// --------------------------------------------------
+Table diagnoses_icd {
+  subject_id integer [not null]
+  hadm_id integer [not null]
+  seq_num integer [not null]
+  icd_code varchar(7)
+  icd_version integer
+
+  indexes {
+    (hadm_id, seq_num) [pk]
+  }
+}
+
+// --------------------------------------------------
+// 05. d_icd_procedures
+// --------------------------------------------------
+Table d_icd_procedures {
+  icd_code char(7) [not null]
+  icd_version integer [not null]
+  long_title varchar(255)
+
+  indexes {
+    (icd_code, icd_version) [pk]
+  }
+}
+
+// --------------------------------------------------
+// 19. procedures_icd
+// --------------------------------------------------
+Table procedures_icd {
+  subject_id integer [not null]
+  hadm_id integer [not null]
+  seq_num integer [not null]
+  chartdate date [not null]
+  icd_code varchar(7)
+  icd_version integer
+
+  indexes {
+    (hadm_id, seq_num) [pk]
+  }
+}
+
+// --------------------------------------------------
+// 06. d_labitems
+// --------------------------------------------------
+Table d_labitems {
+  itemid integer [pk]
+  label varchar(50)
+  fluid varchar(50)
+  category varchar(50)
+}
+
+// --------------------------------------------------
+// 12. labevents
+// --------------------------------------------------
+Table labevents {
+  labevent_id integer [pk, not null]
+  subject_id integer [not null]
+  hadm_id integer
+  specimen_id integer [not null]
+  itemid integer [not null]
+  order_provider_id varchar(10)
+
+  charttime timestamp
+  storetime timestamp
+
+  value varchar(200)
+  valuenum double
+  valueuom varchar(20)
+  ref_range_lower double
+  ref_range_upper double
+  flag varchar(10)
+  priority varchar(7)
+  comments text
+}
+
+// --------------------------------------------------
+// 13. microbiologyevents
+// --------------------------------------------------
+Table microbiologyevents {
+  microevent_id integer [pk, not null]
+  subject_id integer [not null]
+  hadm_id integer
+  micro_specimen_id integer [not null]
+  order_provider_id varchar(10)
+
+  chartdate timestamp [not null]
+  charttime timestamp
+
+  spec_itemid integer [not null]
+  spec_type_desc varchar(100) [not null]
+  test_seq integer [not null]
+
+  storedate timestamp
+  storetime timestamp
+
+  test_itemid integer
+  test_name varchar(100)
+
+  org_itemid integer
+  org_name varchar(100)
+  isolate_num smallint
+  quantity varchar(50)
+
+  ab_itemid integer
+  ab_name varchar(30)
+  dilution_text varchar(10)
+  dilution_comparison varchar(20)
+  dilution_value double
+  interpretation varchar(5)
+
+  comments text
+}
+
+// --------------------------------------------------
+// 08. drgcodes
+// --------------------------------------------------
+Table drgcodes {
+  subject_id integer
+  hadm_id integer
+  drg_type varchar(4)
+  drg_code varchar(10)
+  description varchar(195)
+  drg_severity smallint
+  drg_mortality smallint
+
+  // No PK described; keep as-is. If you want: (hadm_id, drg_type, drg_code)
+}
+
+// --------------------------------------------------
+// 16. poe
+// --------------------------------------------------
+Table poe {
+  poe_id varchar(25) [pk, not null]
+  poe_seq integer [not null]
+
+  subject_id integer [not null]
+  hadm_id integer
+
+  ordertime timestamp [not null]
+  order_type varchar(25) [not null]
+  order_subtype varchar(50)
+  transaction_type varchar(15)
+
+  discontinue_of_poe_id varchar(25)
+  discontinued_by_poe_id varchar(25)
+
+  order_provider_id varchar(10)
+  order_status varchar(15)
+}
+
+// --------------------------------------------------
+// 17. poe_detail
+// --------------------------------------------------
+Table poe_detail {
+  poe_id varchar(25) [not null]
+  poe_seq integer [not null]
+  subject_id integer [not null]
+
+  field_name varchar(255) [not null]
+  field_value text
+
+  indexes {
+    (poe_id, field_name) [pk]
+  }
+}
+
+// --------------------------------------------------
+// 15. pharmacy
+// --------------------------------------------------
+Table pharmacy {
+  subject_id integer [not null]
+  hadm_id integer [not null]
+  pharmacy_id integer [pk, not null]
+
+  poe_id varchar(25)
+
+  starttime timestamp
+  stoptime timestamp
+
+  medication text
+  proc_type varchar(50) [not null]
+  status varchar(50)
+
+  entertime timestamp [not null]
+  verifiedtime timestamp
+
+  route varchar(50)
+  frequency varchar(50)
+  disp_sched varchar(255)
+  infusion_type varchar(15)
+  sliding_scale varchar(1)
+  lockout_interval varchar(50)
+
+  basal_rate real
+  one_hr_max varchar(10)
+  doses_per_24_hrs real
+
+  duration real
+  duration_interval varchar(50)
+
+  expiration_value integer
+  expiration_unit varchar(50)
+  expirationdate timestamp
+
+  dispensation varchar(50)
+  fill_quantity varchar(50)
+}
+
+// --------------------------------------------------
+// 18. prescriptions
+// --------------------------------------------------
+Table prescriptions {
+  subject_id integer [not null]
+  hadm_id integer [not null]
+  pharmacy_id integer [not null]
+
+  poe_id varchar(25)
+  poe_seq integer
+
+  order_provider_id varchar(10)
+
+  starttime timestamp
+  stoptime timestamp
+
+  drug_type varchar(20) [not null]
+  drug varchar(255) [not null]
+
+  formulary_drug_cd varchar(50)
+  gsn varchar(255)
+  ndc varchar(25)
+
+  prod_strength varchar(255)
+  form_rx varchar(25)
+
+  dose_val_rx varchar(100)
+  dose_unit_rx varchar(50)
+  form_val_disp varchar(50)
+  form_unit_disp varchar(50)
+
+  doses_per_24_hrs real
+  route varchar(50)
+
+  indexes {
+    (pharmacy_id, drug_type) [pk]
+  }
+}
+
+// --------------------------------------------------
+// 09. emar
+// --------------------------------------------------
+Table emar {
+  subject_id integer [not null]
+  hadm_id integer
+
+  emar_id varchar(25) [pk, not null]
+  emar_seq integer [not null]
+
+  poe_id varchar(25) [not null]
+  pharmacy_id integer
+  enter_provider_id varchar(10)
+
+  charttime timestamp [not null]
+  medication text
+  event_txt varchar(100)
+  scheduletime timestamp
+  storetime timestamp [not null]
+}
+
+// --------------------------------------------------
+// 10. emar_detail
+// --------------------------------------------------
+Table emar_detail {
+  subject_id integer [not null]
+  emar_id varchar(25) [not null]
+  emar_seq integer [not null]
+
+  parent_field_ordinal varchar(10)
+  administration_type varchar(50)
+  pharmacy_id integer
+
+  barcode_type varchar(4)
+  reason_for_no_barcode text
+  complete_dose_not_given varchar(5)
+
+  dose_due varchar(100)
+  dose_due_unit varchar(50)
+  dose_given varchar(255)
+  dose_given_unit varchar(50)
+
+  will_remainder_of_dose_be_given varchar(5)
+
+  product_amount_given varchar(30)
+  product_unit varchar(30)
+  product_code varchar(30)
+  product_description varchar(255)
+  product_description_other varchar(255)
+
+  prior_infusion_rate varchar(40)
+  infusion_rate varchar(40)
+  infusion_rate_adjustment varchar(50)
+  infusion_rate_adjustment_amount varchar(30)
+  infusion_rate_unit varchar(30)
+
+  route varchar(10)
+  infusion_complete varchar(1)
+  completion_interval varchar(50)
+  new_iv_bag_hung varchar(1)
+  continued_infusion_in_other_location varchar(1)
+
+  restart_interval text
+  side varchar(10)
+  site varchar(255)
+  non_formulary_visual_verification varchar(1)
+
+  indexes {
+    (emar_id, emar_seq, parent_field_ordinal) [pk]
+  }
+}
+
+// --------------------------------------------------
+// 20. services
+// --------------------------------------------------
+Table services {
+  subject_id integer
+  hadm_id integer
+  transfertime timestamp
+  prev_service varchar(20)
+  curr_service varchar(20)
+
+  indexes {
+    (hadm_id, transfertime, curr_service) [pk]
+  }
+}
+
+// --------------------------------------------------
+// 21. transfers
+// --------------------------------------------------
+Table transfers {
+  subject_id integer [not null]
+  hadm_id integer
+  transfer_id integer [pk, not null]
+
+  eventtype varchar(10)
+  careunit varchar(255)
+
+  intime timestamp
+  outtime timestamp
+}
+
+// --------------------------------------------------
+// Relationships (Refs)
+// --------------------------------------------------
+Ref: omr.subject_id > patients.subject_id
+
+Ref: admissions.subject_id > patients.subject_id
+Ref: admissions.admit_provider_id > provider.provider_id
+
+Ref: hcpcsevents.subject_id > patients.subject_id
+Ref: hcpcsevents.hadm_id > admissions.hadm_id
+Ref: hcpcsevents.hcpcs_cd > d_hcpcs.code
+
+Ref: diagnoses_icd.subject_id > patients.subject_id
+Ref: diagnoses_icd.hadm_id > admissions.hadm_id
+Ref: diagnoses_icd.(icd_code, icd_version) > d_icd_diagnoses.(icd_code, icd_version)
+
+Ref: procedures_icd.subject_id > patients.subject_id
+Ref: procedures_icd.hadm_id > admissions.hadm_id
+Ref: procedures_icd.(icd_code, icd_version) > d_icd_procedures.(icd_code, icd_version)
+
+Ref: labevents.subject_id > patients.subject_id
+Ref: labevents.hadm_id > admissions.hadm_id
+Ref: labevents.itemid > d_labitems.itemid
+Ref: labevents.order_provider_id > provider.provider_id
+
+Ref: microbiologyevents.subject_id > patients.subject_id
+Ref: microbiologyevents.hadm_id > admissions.hadm_id
+Ref: microbiologyevents.order_provider_id > provider.provider_id
+
+Ref: drgcodes.subject_id > patients.subject_id
+Ref: drgcodes.hadm_id > admissions.hadm_id
+
+Ref: poe.subject_id > patients.subject_id
+Ref: poe.hadm_id > admissions.hadm_id
+Ref: poe.order_provider_id > provider.provider_id
+Ref: poe.discontinue_of_poe_id > poe.poe_id
+Ref: poe.discontinued_by_poe_id > poe.poe_id
+
+Ref: poe_detail.poe_id > poe.poe_id
+Ref: pharmacy.poe_id > poe.poe_id
+
+Ref: pharmacy.subject_id > patients.subject_id
+Ref: pharmacy.hadm_id > admissions.hadm_id
+
+Ref: prescriptions.subject_id > patients.subject_id
+Ref: prescriptions.hadm_id > admissions.hadm_id
+Ref: prescriptions.pharmacy_id > pharmacy.pharmacy_id
+Ref: prescriptions.poe_id > poe.poe_id
+Ref: prescriptions.order_provider_id > provider.provider_id
+
+Ref: emar.subject_id > patients.subject_id
+Ref: emar.hadm_id > admissions.hadm_id
+Ref: emar.poe_id > poe.poe_id
+Ref: emar.pharmacy_id > pharmacy.pharmacy_id
+Ref: emar.enter_provider_id > provider.provider_id
+
+Ref: emar_detail.subject_id > patients.subject_id
+Ref: emar_detail.emar_id > emar.emar_id
+Ref: emar_detail.pharmacy_id > pharmacy.pharmacy_id
+
+Ref: services.subject_id > patients.subject_id
+Ref: services.hadm_id > admissions.hadm_id
+
+Ref: transfers.subject_id > patients.subject_id
+Ref: transfers.hadm_id > admissions.hadm_id
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
