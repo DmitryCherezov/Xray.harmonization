@@ -72,10 +72,27 @@ MIMIC‑CXR: 2.1
 MIMIC‑CXR‑JPG: 3.1
 
 
-## 5. SQLite
+## 5. Database
 
 <p align="justify">
-The clinical and annotation data in the MIMIC datasets are originally provided in the form of CSV files. Given the large volume of information and the substantial number of patients included in the dataset, directly working with CSV files becomes inefficient for querying and data analysis. Therefore, the CSV tables were converted into a relational database structure. While the dataset authors provide a reference schema designed for PostgreSQL, we opted to use SQLite in order to simplify the experimental workflow and reduce the infrastructure requirements. All tables were therefore imported into an SQLite database, which enabled efficient querying and data manipulation. Subsequent post-processing steps, including the computation of dataset-level statistics such as the number of patients, studies, and images, were performed using SQL queries within the SQLite environment.
+The clinical and annotation data in the MIMIC datasets are originally provided in the form of CSV files. Given the large volume of information and the substantial number of patients included in the dataset, directly working with CSV files becomes inefficient for querying and data analysis. Therefore, the CSV tables were converted into a relational database structure.
+
+<p align="justify">
+The schema description provided by the dataset authors follows a format typically designed for enterprise-level relational database management systems, such as PostgreSQL or Oracle, using standard SQL Data Definition Language (DDL) conventions. While this format is well-suited for production environments, it introduces unnecessary complexity and infrastructure overhead for research-oriented workflows.
+
+<p align="justify">
+Considering that this project is focused on data analysis rather than transactional processing, and does not require intensive concurrent read/write operations, the use of heavyweight database systems is not justified. Instead, a lightweight relational database approach was adopted. The database schema was adapted to be compatible with MySQL-style typing, providing a balance between structural clarity and ease of use.
+
+<p align="justify">
+For the design and visualization of the database structure, the schema was modeled using dbdiagram.io. The corresponding schema definition file is included in the repository, allowing users to recreate the database structure in any preferred relational database system if needed. In this project, MySQL is used as the primary reference implementation.
+
+<p align="justify">
+It is also important to note that the original dataset schema primarily focuses on patient information and clinical annotations. In order to support the goals of this project, additional tables were introduced to capture scanner-related metadata, including acquisition settings. This extension enables joint analysis of both medical data and technical imaging parameters, which is essential for studying the impact of acquisition variability on model performance.
+
+For diagram designe used: https://dbdiagram.io/
+The DBML code is stored in ./sql_scripts/database_diagram.dbml
+The SQL code for DB creation is stored in ./sql_scripts/create_hosp_postgresql.sql
+The MySQL code for DB creation is stored in ./sql_scripts/create_hosp_sqlite.sql
 
 ## 6. Code Description
 
