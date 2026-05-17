@@ -24,6 +24,8 @@ class DataSetsSettings:
     MIMIC_IV_root: Path
     MIMIC_CXR_root: Path
     MIMIC_CXR_JPG_root: Path
+    DB_name: Path
+    SQL_script: Path
     
     @classmethod
     def build(cls, profile:str='default') -> "DataSetsSettings":
@@ -37,7 +39,13 @@ class DataSetsSettings:
             ),
             MIMIC_CXR_JPG_root = Path(
                 conf.get('MIMIC_CXR_JPG_root')
-            )
+            ),
+            DB_name = Path( 'databases' ) / \
+                conf.get('DB_name')
+            ,
+            SQL_script = Path( 'sql_scripts' ) / \
+                conf.get('SQL_script_name')
+            
         )
 
 
@@ -75,6 +83,12 @@ class CSVSettings:
     inputevents_csv: Path
     outputevents_csv: Path
     procedureevents_csv: Path
+    studies_csv: Path
+    images_csv: Path
+    image_acquisition_csv: Path
+    source_chexpert_diagnosis_csv: Path
+    formated_chexpert_diagnosis_csv: Path
+    missing_cxr_pid_csv: Path
 
 
 class YamlConfigManager:
@@ -156,6 +170,14 @@ def load_csv_settings(yaml_profile: str = "default") -> CSVSettings:
         '3.1',
         'icu'
         ))
+    
+    mimic_cxr_jpg_root = Path( os.path.join(
+        paths.MIMIC_CXR_JPG_root,
+        'physionet.org',
+        'files',
+        'mimic-cxr-jpg',
+        '2.1.0'
+        ))
 
     result = CSVSettings(
         # Database paths
@@ -183,6 +205,7 @@ def load_csv_settings(yaml_profile: str = "default") -> CSVSettings:
         provider_csv = hosp_root / 'provider.csv',
         services_csv = hosp_root / 'services.csv',
         transfers_csv = hosp_root / 'transfers.csv',
+        
         # ICU
         caregiver_csv = ICU_root / 'caregiver.csv',
         chartevents_csv = ICU_root / 'chartevents.csv',
@@ -192,7 +215,18 @@ def load_csv_settings(yaml_profile: str = "default") -> CSVSettings:
         ingredientevents_csv = ICU_root / 'ingredientevents.csv',
         inputevents_csv = ICU_root / 'inputevents.csv',
         outputevents_csv = ICU_root / 'outputevents.csv',
-        procedureevents_csv = ICU_root / 'procedureevents.csv'
+        procedureevents_csv = ICU_root / 'procedureevents.csv',
+        
+        # MIMIC-CXR / generated CSVs
+        studies_csv = hosp_root / "studies.csv",
+        images_csv = hosp_root / "images.csv",
+        image_acquisition_csv = hosp_root / "image_acquisition.csv",
+
+        # CheXpert diagnosis
+        source_chexpert_diagnosis_csv = mimic_cxr_jpg_root / 'mimic-cxr-2.0.0-chexpert.csv',
+        formated_chexpert_diagnosis_csv = mimic_cxr_jpg_root / 'mimic_chexpert_disease_labels.csv',
+        missing_cxr_pid_csv = mimic_cxr_jpg_root / 'mimic_IV_missed_PID_list.csv'
+
     )
 
     return result

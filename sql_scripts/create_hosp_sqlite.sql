@@ -2,10 +2,10 @@ PRAGMA foreign_keys = ON;
 
 CREATE TABLE patients (
   subject_id INTEGER PRIMARY KEY NOT NULL,
-  gender TEXT NOT NULL,
-  anchor_age INTEGER NOT NULL,
-  anchor_year INTEGER NOT NULL,
-  anchor_year_group TEXT NOT NULL,
+  gender TEXT,
+  anchor_age INTEGER,
+  anchor_year INTEGER,
+  anchor_year_group TEXT,
   dod TEXT
 );
 
@@ -19,7 +19,6 @@ CREATE TABLE omr (
   seq_num INTEGER NOT NULL,
   result_name TEXT NOT NULL,
   result_value TEXT NOT NULL,
-  PRIMARY KEY (subject_id, chartdate, seq_num),
   FOREIGN KEY (subject_id) REFERENCES patients(subject_id)
 );
 
@@ -75,12 +74,15 @@ CREATE TABLE diagnoses_icd (
   subject_id INTEGER NOT NULL,
   hadm_id INTEGER NOT NULL,
   seq_num INTEGER NOT NULL,
-  icd_code TEXT,
-  icd_version INTEGER,
-  PRIMARY KEY (hadm_id, seq_num),
+  icd_code TEXT NOT NULL,
+  icd_version INTEGER NOT NULL,
+
+  PRIMARY KEY (hadm_id, seq_num, icd_code, icd_version),
+
   FOREIGN KEY (subject_id) REFERENCES patients(subject_id),
   FOREIGN KEY (hadm_id) REFERENCES admissions(hadm_id),
-  FOREIGN KEY (icd_code, icd_version) REFERENCES d_icd_diagnoses(icd_code, icd_version)
+  FOREIGN KEY (icd_code, icd_version)
+    REFERENCES d_icd_diagnoses(icd_code, icd_version)
 );
 
 CREATE TABLE d_icd_procedures (
@@ -97,7 +99,7 @@ CREATE TABLE procedures_icd (
   chartdate TEXT NOT NULL,
   icd_code TEXT,
   icd_version INTEGER,
-  PRIMARY KEY (hadm_id, seq_num),
+  PRIMARY KEY (hadm_id, seq_num, icd_code, icd_version),
   FOREIGN KEY (subject_id) REFERENCES patients(subject_id),
   FOREIGN KEY (hadm_id) REFERENCES admissions(hadm_id),
   FOREIGN KEY (icd_code, icd_version) REFERENCES d_icd_procedures(icd_code, icd_version)
@@ -189,11 +191,9 @@ CREATE TABLE poe (
   discontinued_by_poe_id TEXT,
   order_provider_id TEXT,
   order_status TEXT,
+
   FOREIGN KEY (subject_id) REFERENCES patients(subject_id),
-  FOREIGN KEY (hadm_id) REFERENCES admissions(hadm_id),
-  FOREIGN KEY (order_provider_id) REFERENCES provider(provider_id),
-  FOREIGN KEY (discontinue_of_poe_id) REFERENCES poe(poe_id),
-  FOREIGN KEY (discontinued_by_poe_id) REFERENCES poe(poe_id)
+  FOREIGN KEY (hadm_id) REFERENCES admissions(hadm_id)
 );
 
 CREATE TABLE poe_detail (
@@ -234,7 +234,7 @@ CREATE TABLE pharmacy (
   expirationdate TEXT,
   dispensation TEXT,
   fill_quantity TEXT,
-  FOREIGN KEY (poe_id) REFERENCES poe(poe_id),
+
   FOREIGN KEY (subject_id) REFERENCES patients(subject_id),
   FOREIGN KEY (hadm_id) REFERENCES admissions(hadm_id)
 );
@@ -261,12 +261,11 @@ CREATE TABLE prescriptions (
   form_unit_disp TEXT,
   doses_per_24_hrs REAL,
   route TEXT,
-  PRIMARY KEY (pharmacy_id, drug_type),
+
+  PRIMARY KEY (pharmacy_id, drug_type, drug),
+
   FOREIGN KEY (subject_id) REFERENCES patients(subject_id),
-  FOREIGN KEY (hadm_id) REFERENCES admissions(hadm_id),
-  FOREIGN KEY (pharmacy_id) REFERENCES pharmacy(pharmacy_id),
-  FOREIGN KEY (poe_id) REFERENCES poe(poe_id),
-  FOREIGN KEY (order_provider_id) REFERENCES provider(provider_id)
+  FOREIGN KEY (hadm_id) REFERENCES admissions(hadm_id)
 );
 
 CREATE TABLE emar (
@@ -282,11 +281,9 @@ CREATE TABLE emar (
   event_txt TEXT,
   scheduletime TEXT,
   storetime TEXT NOT NULL,
+
   FOREIGN KEY (subject_id) REFERENCES patients(subject_id),
-  FOREIGN KEY (hadm_id) REFERENCES admissions(hadm_id),
-  FOREIGN KEY (poe_id) REFERENCES poe(poe_id),
-  FOREIGN KEY (pharmacy_id) REFERENCES pharmacy(pharmacy_id),
-  FOREIGN KEY (enter_provider_id) REFERENCES provider(provider_id)
+  FOREIGN KEY (hadm_id) REFERENCES admissions(hadm_id)
 );
 
 CREATE TABLE emar_detail (
@@ -323,10 +320,9 @@ CREATE TABLE emar_detail (
   side TEXT,
   site TEXT,
   non_formulary_visual_verification TEXT,
-  PRIMARY KEY (emar_id, emar_seq, parent_field_ordinal),
+
   FOREIGN KEY (subject_id) REFERENCES patients(subject_id),
-  FOREIGN KEY (emar_id) REFERENCES emar(emar_id),
-  FOREIGN KEY (pharmacy_id) REFERENCES pharmacy(pharmacy_id)
+  FOREIGN KEY (emar_id) REFERENCES emar(emar_id)
 );
 
 CREATE TABLE services (
@@ -348,8 +344,8 @@ CREATE TABLE transfers (
   careunit TEXT,
   intime TEXT,
   outtime TEXT,
-  FOREIGN KEY (subject_id) REFERENCES patients(subject_id),
-  FOREIGN KEY (hadm_id) REFERENCES admissions(hadm_id)
+
+  FOREIGN KEY (subject_id) REFERENCES patients(subject_id)
 );
 
 CREATE TABLE studies (
@@ -359,14 +355,14 @@ CREATE TABLE studies (
 );
 
 CREATE TABLE images (
-  image_id INTEGER PRIMARY KEY NOT NULL,
+  image_id TEXT  PRIMARY KEY NOT NULL,
   study_id INTEGER NOT NULL,
   file_path TEXT,
   FOREIGN KEY (study_id) REFERENCES studies(study_id)
 );
 
 CREATE TABLE image_acquisition (
-  image_id INTEGER PRIMARY KEY NOT NULL,
+  image_id TEXT  PRIMARY KEY NOT NULL,
   view_code TEXT,
   kvp REAL,
   detector_type_code TEXT,

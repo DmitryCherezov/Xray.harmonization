@@ -12,8 +12,7 @@ CREATE TABLE "omr" (
   "chartdate" date NOT NULL,
   "seq_num" integer NOT NULL,
   "result_name" varchar(100) NOT NULL,
-  "result_value" text NOT NULL,
-  PRIMARY KEY ("subject_id", "chartdate", "seq_num")
+  "result_value" text NOT NULL
 );
 
 CREATE TABLE "provider" (
@@ -67,9 +66,9 @@ CREATE TABLE "diagnoses_icd" (
   "subject_id" integer NOT NULL,
   "hadm_id" integer NOT NULL,
   "seq_num" integer NOT NULL,
-  "icd_code" varchar(7),
-  "icd_version" integer,
-  PRIMARY KEY ("hadm_id", "seq_num")
+  "icd_code" varchar(7) NOT NULL,
+  "icd_version" integer NOT NULL,
+  PRIMARY KEY (hadm_id, seq_num, icd_code, icd_version)
 );
 
 CREATE TABLE "d_icd_procedures" (
@@ -309,13 +308,13 @@ CREATE TABLE "studies" (
 );
 
 CREATE TABLE "images" (
-  "image_id" integer PRIMARY KEY NOT NULL,
+  "image_id" text PRIMARY KEY NOT NULL,
   "study_id" integer NOT NULL,
   "file_path" text
 );
 
 CREATE TABLE "image_acquisition" (
-  "image_id" integer PRIMARY KEY NOT NULL,
+  "image_id" text PRIMARY KEY NOT NULL,
   "view_code" varchar(16),
   "kvp" real,
   "detector_type_code" varchar(32),
@@ -330,7 +329,7 @@ CREATE TABLE "image_acquisition" (
   "model_name" text
 );
 
-CREATE TABLE "chexpert_diagnosisi" (
+CREATE TABLE "chexpert_diagnosis" (
   "study_id" integer PRIMARY KEY NOT NULL,
   "atelectasis" integer,
   "cardiomegaly" integer,

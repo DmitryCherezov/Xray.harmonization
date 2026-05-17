@@ -116,6 +116,9 @@ To download the dataset use `python/download_data.ipynb`. It is important to not
 
 #### 6.5.3 Harmonization in Fourier Space
 
+#### 6.5.4 Image Size Impact on Harmonization
+
+
 
 ## 6. Contacts
 

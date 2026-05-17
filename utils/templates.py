@@ -28,6 +28,7 @@ CSV_GZ_EXTENSION = ".gz"
 
 MESSAGE_ROOT_FOUND = '[X] Root fount'
 
+MESSAGE_NUMBER_CSV_FILES_CHECKED = 'Number of CSV files checked: {csv_file_num}'
 MESSAGE_REQUIRED_CSV_NOT_FOUND = 'Required CSV file not found:\n{csv_file_path}'
 MESSAGE_ALL_FILES_FOUND = '[X] All required CSV files found'
 MESSAGE_SQLITE_CONNECTION_READY = '[X] Connection is ready'
