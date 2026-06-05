@@ -71,6 +71,18 @@ MIMIC‑IV: 2.1
 MIMIC‑CXR: 2.1
 MIMIC‑CXR‑JPG: 3.1
 
+## 3.1 NLP-Based Label Extraction
+In MIMIC-CXR-JPG, CheXpert disease labels are generated automatically from the free-text radiology report associated with each imaging study, rather than being manually assigned to individual images. The CheXpert labeler is a rule-based NLP system that searches clinically relevant report sections, especially the impression section, for mentions of predefined chest X-ray observations such as atelectasis, cardiomegaly, consolidation, edema, pleural effusion, pneumonia, pneumothorax, support devices, and no finding. For each detected observation, the labeler analyzes the surrounding text to determine whether the finding is stated as present, explicitly absent, or uncertain, using rules for negation and uncertainty expressions. These mention-level decisions are then aggregated into one study-level label per observation. In the resulting MIMIC-CXR-JPG CheXpert label file, values typically indicate 
+
+|       CSV value | Meaning                                         |
+| --------------: | ----------------------------------------------- |
+|           `1.0` | positive mention; finding is considered present |
+|           `0.0` | negative mention; finding is considered absent  |
+|          `-1.0` | uncertain mention                               |
+| missing / blank | not mentioned                                   |
+
+
+Because labels are derived at the study/report level, all images belonging to the same study, such as frontal and lateral views, inherit the same set of labels.
 
 ## 5. Database
 
@@ -94,12 +106,6 @@ The DBML code is stored in ./sql_scripts/database_diagram.dbml
 The SQL code for DB creation is stored in ./sql_scripts/create_hosp_postgresql.sql
 The MySQL code for DB creation is stored in ./sql_scripts/create_hosp_sqlite.sql
 
-|       CSV value | Meaning                                         |
-| --------------: | ----------------------------------------------- |
-|           `1.0` | positive mention; finding is considered present |
-|           `0.0` | negative mention; finding is considered absent  |
-|          `-1.0` | uncertain mention                               |
-| missing / blank | not mentioned                                   |
 
 
 ## 6. Code Description
