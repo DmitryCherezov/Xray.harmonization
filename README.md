@@ -94,6 +94,14 @@ The DBML code is stored in ./sql_scripts/database_diagram.dbml
 The SQL code for DB creation is stored in ./sql_scripts/create_hosp_postgresql.sql
 The MySQL code for DB creation is stored in ./sql_scripts/create_hosp_sqlite.sql
 
+|       CSV value | Meaning                                         |
+| --------------: | ----------------------------------------------- |
+|           `1.0` | positive mention; finding is considered present |
+|           `0.0` | negative mention; finding is considered absent  |
+|          `-1.0` | uncertain mention                               |
+| missing / blank | not mentioned                                   |
+
+
 ## 6. Code Description
 
 To download the dataset use `python/download_data.ipynb`. It is important to note that you have to get an access to the data prior start downloading.

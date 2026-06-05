@@ -395,7 +395,22 @@ def get_csv_table_mapping(
 
     return TABLE_INSERT_ORDER, TABLE_TO_CSV
 
-
+CHEXPERT_COLUMN_MAPPING = {
+    "Atelectasis": "atelectasis",
+    "Cardiomegaly": "cardiomegaly",
+    "Consolidation": "consolidation",
+    "Edema": "edema",
+    "Enlarged Cardiomediastinum": "enlarged_cardiomediastinum",
+    "Fracture": "fracture",
+    "Lung Lesion": "lung_lesion",
+    "Lung Opacity": "lung_opacity",
+    "No Finding": "no_finding",
+    "Pleural Effusion": "pleural_effusion",
+    "Pleural Other": "pleural_other",
+    "Pneumonia": "pneumonia",
+    "Pneumothorax": "pneumothorax",
+    "Support Devices": "support_devices",
+}
 
 def inject_csv_to_table(
     db_path: Path,
@@ -417,6 +432,10 @@ def inject_csv_to_table(
         conn.execute("PRAGMA foreign_keys = ON;")
 
         for chunk in pd.read_csv(csv_path, chunksize=chunksize, low_memory=False):
+
+            if table_name == "chexpert_diagnosis":
+                chunk = chunk.rename(columns=CHEXPERT_COLUMN_MAPPING)
+                
             chunk.to_sql(
                 name=table_name,
                 con=conn,

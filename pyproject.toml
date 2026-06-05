@@ -15,7 +15,8 @@ dependencies = [
     "pandas (>=2.3.3,<3.0.0)",
     "matplotlib (>=3.10.8,<4.0.0)",
     "scikit-learn (>=1.8.0,<2.0.0)",
-    "pydicom (>=3.0.2,<4.0.0)"
+    "pydicom (>=3.0.2,<4.0.0)",
+    "reportlab (>=4.5.1,<5.0.0)"
 ]
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]

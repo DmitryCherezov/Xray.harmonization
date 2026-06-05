@@ -3,6 +3,47 @@ import sqlite3
 import pandas as pd
 
 
+
+DISEASE_COLUMNS = [
+    "atelectasis",
+    "cardiomegaly",
+    "consolidation",
+    "edema",
+    "enlarged_cardiomediastinum",
+    "fracture",
+    "lung_lesion",
+    "lung_opacity",
+    "no_finding",
+    "pleural_effusion",
+    "pleural_other",
+    "pneumonia",
+    "pneumothorax",
+    "support_devices",
+]
+
+
+POPULATIONS = [
+    {
+        "population": "kvp=90, detector=direct, view=AP",
+        "kvp": 90,
+        "detector_type_code": "direct",
+        "view_code": "AP",
+    },
+    {
+        "population": "kvp=110, detector=direct, view=PA",
+        "kvp": 110,
+        "detector_type_code": "direct",
+        "view_code": "PA",
+    },
+    {
+        "population": "kvp=120, detector=scintillator, view=PA",
+        "kvp": 120,
+        "detector_type_code": "scintillator",
+        "view_code": "PA",
+    },
+]
+
+
 def summarize_image_acquisition(db_path: Path) -> dict[str, pd.DataFrame]:
     """
     Summarize image acquisition statistics:
@@ -160,3 +201,649 @@ def print_image_acquisition_summary(summary: dict) -> None:
             )
 
     print("\n" + "=" * 60)
+
+
+def get_view_counts(db_path: Path) -> pd.DataFrame:
+    """
+    Counts the number of images for each view type.
+
+    Parameters
+    ----------
+    db_path : Path
+        Path to SQLite database.
+
+    Returns
+    -------
+    pd.DataFrame
+        Table with view_code, image_count, and percent.
+    """
+
+    query = """
+        SELECT
+            COALESCE(NULLIF(TRIM(view_code), ''), 'missing') AS view_code,
+            COUNT(*) AS image_count,
+            ROUND(
+                100.0 * COUNT(*) / SUM(COUNT(*)) OVER (),
+                2
+            ) AS percent
+        FROM image_acquisition
+        GROUP BY COALESCE(NULLIF(TRIM(view_code), ''), 'missing')
+        ORDER BY image_count DESC;
+    """
+
+    with sqlite3.connect(db_path) as conn:
+        df = pd.read_sql_query(query, conn)
+
+    return df
+
+
+def print_view_counts(view_counts: pd.DataFrame) -> None:
+    """
+    Prints image counts by view type.
+
+    Parameters
+    ----------
+    view_counts : pd.DataFrame
+        Output of get_view_counts().
+    """
+
+    print("\nImage counts by view type")
+    print("-" * 40)
+
+    for _, row in view_counts.iterrows():
+        print(
+            f"{row['view_code']:>12}: "
+            f"{row['image_count']:>8} images "
+            f"({row['percent']:>6.2f}%)"
+        )
+
+    print("-" * 40)
+    print(f"{'total':>12}: {view_counts['image_count'].sum():>8} images")
+
+
+def get_detector_type_counts(db_path: str | Path) -> pd.DataFrame:
+    """
+    Count images by detector_type_code.
+    """
+
+    query = """
+        SELECT
+            COALESCE(NULLIF(TRIM(detector_type_code), ''), 'missing') AS detector_type_code,
+            COUNT(*) AS image_count
+        FROM image_acquisition
+        GROUP BY COALESCE(NULLIF(TRIM(detector_type_code), ''), 'missing')
+        ORDER BY image_count DESC;
+    """
+
+    with sqlite3.connect(Path(db_path)) as conn:
+        detector_type_counts = pd.read_sql_query(query, conn)
+
+    return detector_type_counts
+
+
+def print_detector_type_counts(detector_type_counts: pd.DataFrame) -> None:
+    """
+    Print detector_type_code counts.
+    """
+
+    print("\nDetector type counts:")
+    print(detector_type_counts.to_string(index=False))
+
+
+
+def get_kvp_by_detector_table(db_path: str | Path) -> pd.DataFrame:
+    """
+    Count images by KVP group and detector_type_code.
+
+    Rows:
+        KVP groups
+
+    Columns:
+        detector_type_code values, e.g. DIRECT / SCINTILLATOR
+
+    Values:
+        image counts
+    """
+
+    query = """
+        SELECT
+            CASE
+                WHEN kvp IS NULL THEN 'missing'
+                WHEN kvp < 90 THEN '<90'
+                WHEN kvp = 90 THEN '=90'
+                WHEN kvp > 90 AND kvp < 110 THEN '>90 and <110'
+                WHEN kvp = 110 THEN '=110'
+                WHEN kvp > 110 AND kvp < 120 THEN '>110 and <120'
+                WHEN kvp = 120 THEN '=120'
+                WHEN kvp > 120 THEN '>120'
+                ELSE 'other'
+            END AS kvp_group,
+
+            COALESCE(NULLIF(TRIM(detector_type_code), ''), 'missing') AS detector_type_code,
+
+            COUNT(*) AS image_count
+
+        FROM image_acquisition
+
+        GROUP BY
+            CASE
+                WHEN kvp IS NULL THEN 'missing'
+                WHEN kvp < 90 THEN '<90'
+                WHEN kvp = 90 THEN '=90'
+                WHEN kvp > 90 AND kvp < 110 THEN '>90 and <110'
+                WHEN kvp = 110 THEN '=110'
+                WHEN kvp > 110 AND kvp < 120 THEN '>110 and <120'
+                WHEN kvp = 120 THEN '=120'
+                WHEN kvp > 120 THEN '>120'
+                ELSE 'other'
+            END,
+            COALESCE(NULLIF(TRIM(detector_type_code), ''), 'missing');
+    """
+
+    with sqlite3.connect(Path(db_path)) as conn:
+        df = pd.read_sql_query(query, conn)
+
+    table = df.pivot_table(
+        index="kvp_group",
+        columns="detector_type_code",
+        values="image_count",
+        fill_value=0,
+        aggfunc="sum",
+    )
+
+    kvp_order = [
+        "<90",
+        "=90",
+        ">90 and <110",
+        "=110",
+        ">110 and <120",
+        "=120",
+        ">120",
+        "missing",
+        "other",
+    ]
+
+    table = table.reindex(kvp_order)
+    table = table.dropna(how="all")
+    table = table.astype(int)
+
+    return table
+
+
+def print_kvp_by_detector_table(table: pd.DataFrame) -> None:
+    """
+    Print KVP-by-detector contingency table.
+    """
+
+    print("\nKVP by detector type:")
+    print(table.to_string())
+
+def get_kvp_by_detector_table_for_ap_pa(db_path: str | Path) -> dict[str, pd.DataFrame]:
+    """
+    Compute KVP-by-detector tables separately for AP and PA views.
+
+    Rows:
+        KVP groups
+
+    Columns:
+        detector_type_code values
+
+    Values:
+        image counts
+    """
+
+    query = """
+        SELECT
+            COALESCE(NULLIF(TRIM(view_code), ''), 'missing') AS view_code,
+
+            CASE
+                WHEN kvp IS NULL THEN 'missing'
+                WHEN kvp < 90 THEN '<90'
+                WHEN kvp = 90 THEN '=90'
+                WHEN kvp > 90 AND kvp < 110 THEN '>90 and <110'
+                WHEN kvp = 110 THEN '=110'
+                WHEN kvp > 110 AND kvp < 120 THEN '>110 and <120'
+                WHEN kvp = 120 THEN '=120'
+                WHEN kvp > 120 THEN '>120'
+                ELSE 'other'
+            END AS kvp_group,
+
+            COALESCE(NULLIF(TRIM(detector_type_code), ''), 'missing') AS detector_type_code,
+
+            COUNT(*) AS image_count
+
+        FROM image_acquisition
+
+        WHERE TRIM(view_code) IN ('AP', 'PA')
+
+        GROUP BY
+            COALESCE(NULLIF(TRIM(view_code), ''), 'missing'),
+            CASE
+                WHEN kvp IS NULL THEN 'missing'
+                WHEN kvp < 90 THEN '<90'
+                WHEN kvp = 90 THEN '=90'
+                WHEN kvp > 90 AND kvp < 110 THEN '>90 and <110'
+                WHEN kvp = 110 THEN '=110'
+                WHEN kvp > 110 AND kvp < 120 THEN '>110 and <120'
+                WHEN kvp = 120 THEN '=120'
+                WHEN kvp > 120 THEN '>120'
+                ELSE 'other'
+            END,
+            COALESCE(NULLIF(TRIM(detector_type_code), ''), 'missing');
+    """
+
+    kvp_order = [
+        "<90",
+        "=90",
+        ">90 and <110",
+        "=110",
+        ">110 and <120",
+        "=120",
+        ">120",
+        "missing",
+        "other",
+    ]
+
+    with sqlite3.connect(Path(db_path)) as conn:
+        df = pd.read_sql_query(query, conn)
+
+    result = {}
+
+    for view in ["AP", "PA"]:
+        view_df = df[df["view_code"] == view]
+
+        table = view_df.pivot_table(
+            index="kvp_group",
+            columns="detector_type_code",
+            values="image_count",
+            fill_value=0,
+            aggfunc="sum",
+        )
+
+        table = table.reindex(kvp_order)
+        table = table.dropna(how="all")
+        table = table.astype(int)
+
+        result[view] = table
+
+    return result
+
+def print_kvp_by_detector_table_for_ap_pa(tables: dict[str, pd.DataFrame]) -> None:
+    """
+    Print KVP-by-detector tables for AP and PA views.
+    """
+
+    for view, table in tables.items():
+        print("\n" + "=" * 40)
+        print(f"KVP by detector type for {view} view")
+        print("=" * 40)
+
+        if table.empty:
+            print("No data.")
+        else:
+            print(table.to_string())
+
+
+KVP_GROUP_ORDER = [
+    "<90",
+    "=90",
+    ">90 and <110",
+    "=110",
+    ">110 and <120",
+    "=120",
+    ">120",
+    "missing",
+]
+
+DETECTOR_TYPE_ORDER = [
+    "DIRECT",
+    "SCINTILLATOR",
+    "missing",
+]
+
+
+def format_kvp_by_detector_table(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Convert long-format table:
+
+        detector_type_code | kvp_group | image_count
+
+    into wide-format table:
+
+        kvp_group | DIRECT | SCINTILLATOR | missing
+    """
+
+    if df.empty:
+        return pd.DataFrame(
+            {
+                "kvp_group": KVP_GROUP_ORDER,
+                "DIRECT": 0,
+                "SCINTILLATOR": 0,
+                "missing": 0,
+            }
+        )
+
+    table = (
+        df.pivot_table(
+            index="kvp_group",
+            columns="detector_type_code",
+            values="image_count",
+            aggfunc="sum",
+            fill_value=0,
+        )
+        .reset_index()
+    )
+
+    # Ensure all detector columns exist
+    for detector_type in DETECTOR_TYPE_ORDER:
+        if detector_type not in table.columns:
+            table[detector_type] = 0
+
+    # Ensure all kVp groups exist, even if count is zero
+    all_kvp_groups = pd.DataFrame({"kvp_group": KVP_GROUP_ORDER})
+
+    table = all_kvp_groups.merge(
+        table,
+        on="kvp_group",
+        how="left",
+    )
+
+    # Fill missing values after merge
+    for detector_type in DETECTOR_TYPE_ORDER:
+        table[detector_type] = table[detector_type].fillna(0).astype(int)
+
+    table = table[["kvp_group"] + DETECTOR_TYPE_ORDER]
+
+    return table
+
+
+def get_kvp_by_detector_table_for_lateral(
+    db_path: str | Path,
+) -> pd.DataFrame:
+    """
+    Compute kVp distribution by detector type for lateral views.
+
+    Returns table in wide format:
+
+        kvp_group | DIRECT | SCINTILLATOR | missing
+    """
+
+    query = """
+        SELECT
+            COALESCE(NULLIF(TRIM(detector_type_code), ''), 'missing') AS detector_type_code,
+            CASE
+                WHEN kvp IS NULL THEN 'missing'
+                WHEN kvp < 90 THEN '<90'
+                WHEN kvp = 90 THEN '=90'
+                WHEN kvp > 90 AND kvp < 110 THEN '>90 and <110'
+                WHEN kvp = 110 THEN '=110'
+                WHEN kvp > 110 AND kvp < 120 THEN '>110 and <120'
+                WHEN kvp = 120 THEN '=120'
+                WHEN kvp > 120 THEN '>120'
+                ELSE 'missing'
+            END AS kvp_group,
+            COUNT(*) AS image_count
+        FROM image_acquisition
+        WHERE UPPER(TRIM(view_code)) = 'LATERAL'
+        GROUP BY detector_type_code, kvp_group
+        ORDER BY detector_type_code, kvp_group;
+    """
+
+    with sqlite3.connect(db_path) as conn:
+        df = pd.read_sql_query(query, conn)
+
+    return format_kvp_by_detector_table(df)
+
+def get_kvp_by_detector_table_for_ll(
+    db_path: str | Path,
+) -> pd.DataFrame:
+    """
+    Compute kVp distribution by detector type for LL views.
+
+    Returns table in wide format:
+
+        kvp_group | DIRECT | SCINTILLATOR | missing
+    """
+
+    query = """
+        SELECT
+            COALESCE(NULLIF(TRIM(detector_type_code), ''), 'missing') AS detector_type_code,
+            CASE
+                WHEN kvp IS NULL THEN 'missing'
+                WHEN kvp < 90 THEN '<90'
+                WHEN kvp = 90 THEN '=90'
+                WHEN kvp > 90 AND kvp < 110 THEN '>90 and <110'
+                WHEN kvp = 110 THEN '=110'
+                WHEN kvp > 110 AND kvp < 120 THEN '>110 and <120'
+                WHEN kvp = 120 THEN '=120'
+                WHEN kvp > 120 THEN '>120'
+                ELSE 'missing'
+            END AS kvp_group,
+            COUNT(*) AS image_count
+        FROM image_acquisition
+        WHERE UPPER(TRIM(view_code)) = 'LL'
+        GROUP BY detector_type_code, kvp_group
+        ORDER BY detector_type_code, kvp_group;
+    """
+
+    with sqlite3.connect(db_path) as conn:
+        df = pd.read_sql_query(query, conn)
+
+    return format_kvp_by_detector_table(df)
+
+
+def get_kvp_by_detector_table_for_missing_view(
+    db_path: str | Path,
+) -> pd.DataFrame:
+    """
+    Compute kVp distribution by detector type for images with missing view code.
+
+    Returns table in wide format:
+
+        kvp_group | DIRECT | SCINTILLATOR | missing
+    """
+
+    query = """
+        SELECT
+            COALESCE(NULLIF(TRIM(detector_type_code), ''), 'missing') AS detector_type_code,
+            CASE
+                WHEN kvp IS NULL THEN 'missing'
+                WHEN kvp < 90 THEN '<90'
+                WHEN kvp = 90 THEN '=90'
+                WHEN kvp > 90 AND kvp < 110 THEN '>90 and <110'
+                WHEN kvp = 110 THEN '=110'
+                WHEN kvp > 110 AND kvp < 120 THEN '>110 and <120'
+                WHEN kvp = 120 THEN '=120'
+                WHEN kvp > 120 THEN '>120'
+                ELSE 'missing'
+            END AS kvp_group,
+            COUNT(*) AS image_count
+        FROM image_acquisition
+        WHERE view_code IS NULL
+           OR TRIM(view_code) = ''
+        GROUP BY detector_type_code, kvp_group
+        ORDER BY detector_type_code, kvp_group;
+    """
+
+    with sqlite3.connect(db_path) as conn:
+        df = pd.read_sql_query(query, conn)
+
+    return format_kvp_by_detector_table(df)
+
+
+def print_table_names(db_path: str | Path) -> None:
+    db_path = Path(db_path)
+
+    query = """
+        SELECT name
+        FROM sqlite_master
+        WHERE type = 'table'
+        ORDER BY name;
+    """
+
+    with sqlite3.connect(db_path) as conn:
+        cursor = conn.execute(query)
+        table_names = cursor.fetchall()
+
+    for (table_name,) in table_names:
+        print(table_name)
+
+def print_row_counts_for_tables(db_path: str | Path) -> None:
+    db_path = Path(db_path)
+
+    table_names = [
+        "chexpert_diagnosis",
+        "chexpert_diagnosisi",
+    ]
+
+    with sqlite3.connect(db_path) as conn:
+        for table_name in table_names:
+            query = f'SELECT COUNT(*) FROM "{table_name}";'
+            row_count = conn.execute(query).fetchone()[0]
+            print(f"{table_name}: {row_count}")
+
+
+
+def get_chexpert_population_statistics(
+    db_path: str | Path,
+    populations: list[dict] = POPULATIONS,
+    disease_columns: list[str] = DISEASE_COLUMNS,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """
+    Compute CheXpert label statistics for selected acquisition populations.
+
+    Returns
+    -------
+    population_summary_df:
+        One row per population with:
+            population
+            unique_patients
+            image_count
+
+    label_statistics_df:
+        One row per population and disease with:
+            population
+            disease
+            label_0_count
+            label_1_count
+            label_minus_1_count
+    """
+
+    db_path = Path(db_path)
+
+    summary_rows = []
+    label_rows = []
+
+    with sqlite3.connect(db_path) as conn:
+        for pop in populations:
+            population_name = pop["population"]
+            kvp = pop["kvp"]
+            detector_type_code = pop["detector_type_code"]
+            view_code = pop["view_code"]
+
+            summary_query = """
+                SELECT
+                    COUNT(DISTINCT s.subject_id) AS unique_patients,
+                    COUNT(DISTINCT i.image_id) AS image_count
+                FROM chexpert_diagnosis AS cd
+                INNER JOIN images AS i
+                    ON cd.study_id = i.study_id
+                INNER JOIN studies AS s
+                    ON cd.study_id = s.study_id
+                INNER JOIN image_acquisition AS ia
+                    ON i.image_id = ia.image_id
+                WHERE ia.kvp = ?
+                  AND LOWER(TRIM(ia.detector_type_code)) = LOWER(TRIM(?))
+                  AND UPPER(TRIM(ia.view_code)) = UPPER(TRIM(?));
+            """
+
+            summary_df = pd.read_sql_query(
+                summary_query,
+                conn,
+                params=(kvp, detector_type_code, view_code),
+            )
+
+            summary_rows.append(
+                {
+                    "population": population_name,
+                    "unique_patients": int(summary_df.loc[0, "unique_patients"]),
+                    "image_count": int(summary_df.loc[0, "image_count"]),
+                }
+            )
+
+            for disease in disease_columns:
+                label_query = f"""
+                    SELECT
+                        SUM(CASE WHEN cd."{disease}" = 0 THEN 1 ELSE 0 END) AS label_0_count,
+                        SUM(CASE WHEN cd."{disease}" = 1 THEN 1 ELSE 0 END) AS label_1_count,
+                        SUM(CASE WHEN cd."{disease}" = -1 THEN 1 ELSE 0 END) AS label_minus_1_count
+                    FROM chexpert_diagnosis AS cd
+                    INNER JOIN images AS i
+                        ON cd.study_id = i.study_id
+                    INNER JOIN studies AS s
+                        ON cd.study_id = s.study_id
+                    INNER JOIN image_acquisition AS ia
+                        ON i.image_id = ia.image_id
+                    WHERE ia.kvp = ?
+                      AND LOWER(TRIM(ia.detector_type_code)) = LOWER(TRIM(?))
+                      AND UPPER(TRIM(ia.view_code)) = UPPER(TRIM(?));
+                """
+
+                label_df = pd.read_sql_query(
+                    label_query,
+                    conn,
+                    params=(kvp, detector_type_code, view_code),
+                )
+
+                label_rows.append(
+                    {
+                        "population": population_name,
+                        "disease": disease,
+                        "label_0_count": int(label_df.loc[0, "label_0_count"] or 0),
+                        "label_1_count": int(label_df.loc[0, "label_1_count"] or 0),
+                        "label_minus_1_count": int(label_df.loc[0, "label_minus_1_count"] or 0),
+                    }
+                )
+
+    population_summary_df = pd.DataFrame(summary_rows)
+    label_statistics_df = pd.DataFrame(label_rows)
+
+    return population_summary_df, label_statistics_df
+
+
+def print_chexpert_population_statistics(
+    population_summary_df: pd.DataFrame,
+    label_statistics_df: pd.DataFrame,
+) -> None:
+    """
+    Print population-level and disease-level statistics.
+    """
+
+    for population in population_summary_df["population"]:
+        print("=" * 80)
+        print(population)
+        print("=" * 80)
+
+        summary_row = population_summary_df[
+            population_summary_df["population"] == population
+        ].iloc[0]
+
+        print(f"Unique patients: {summary_row['unique_patients']}")
+        print(f"Images:          {summary_row['image_count']}")
+        print()
+
+        disease_df = label_statistics_df[
+            label_statistics_df["population"] == population
+        ].copy()
+
+        disease_df = disease_df[
+            [
+                "disease",
+                "label_0_count",
+                "label_1_count",
+                "label_minus_1_count",
+            ]
+        ]
+
+        print(disease_df.to_string(index=False))
+        print()

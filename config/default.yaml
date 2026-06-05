@@ -1,5 +1,5 @@
 MIMIC_IV_root: D:\003.Data\MIMIC-IV.v3.1
-MIMIC_CXR_root: D:\003.Data\MIMIC-CXR.v2.1
+MIMIC_CXR_root: D:\003.Data\MIMIC-CXR.v2.1-60k
 MIMIC_CXR_JPG_root: D:\003.Data\MIMIC-CXR-JPG.v2.1
 DB_name: mimic-iv-v3.1.db
 SQL_script_name: create_hosp_sqlite.sql

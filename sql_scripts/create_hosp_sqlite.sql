@@ -378,7 +378,7 @@ CREATE TABLE image_acquisition (
   FOREIGN KEY (image_id) REFERENCES images(image_id)
 );
 
-CREATE TABLE chexpert_diagnosisi (
+CREATE TABLE chexpert_diagnosis (
   study_id INTEGER PRIMARY KEY NOT NULL,
   atelectasis INTEGER,
   cardiomegaly INTEGER,
@@ -396,3 +396,6 @@ CREATE TABLE chexpert_diagnosisi (
   support_devices INTEGER,
   FOREIGN KEY (study_id) REFERENCES studies(study_id)
 );
+
+
+
