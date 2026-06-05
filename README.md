@@ -72,6 +72,7 @@ MIMIC‑CXR: 2.1
 MIMIC‑CXR‑JPG: 3.1
 
 ## 3.1 NLP-Based Label Extraction
+<p align="justify">
 In MIMIC-CXR-JPG, CheXpert disease labels are generated automatically from the free-text radiology report associated with each imaging study, rather than being manually assigned to individual images. The CheXpert labeler is a rule-based NLP system that searches clinically relevant report sections, especially the impression section, for mentions of predefined chest X-ray observations such as atelectasis, cardiomegaly, consolidation, edema, pleural effusion, pneumonia, pneumothorax, support devices, and no finding. For each detected observation, the labeler analyzes the surrounding text to determine whether the finding is stated as present, explicitly absent, or uncertain, using rules for negation and uncertainty expressions. These mention-level decisions are then aggregated into one study-level label per observation. In the resulting MIMIC-CXR-JPG CheXpert label file, values typically indicate 
 
 |       CSV value | Meaning                                         |
@@ -81,8 +82,24 @@ In MIMIC-CXR-JPG, CheXpert disease labels are generated automatically from the f
 |          `-1.0` | uncertain mention                               |
 | missing / blank | not mentioned                                   |
 
-
+<p align="justify">
 Because labels are derived at the study/report level, all images belonging to the same study, such as frontal and lateral views, inherit the same set of labels.
+
+<p align="justify">
+A study was considered positive for a disease only when the corresponding CheXpert label was `1.0`. Studies with no positive disease labels were treated as having no NLP-detected positive findings among the analyzed CheXpert observations. This should not be interpreted as proof that the patient had no disease, because labels are automatically extracted from radiology reports and missing labels may indicate that a finding was not mentioned rather than explicitly absent.
+
+Thus:
+| Situation                        | Meaning                                                                                                        |
+| -------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| Disease label = `1.0`            | Finding is mentioned as present                                                                                |
+| Disease label = `0.0`            | Finding is explicitly mentioned as absent                                                                      |
+| Disease label = `-1.0`           | Finding is uncertain                                                                                           |
+| Disease label is blank / missing | Finding was not mentioned                                                                                      |
+| `No Finding = 1.0`               | Report suggests no detected abnormal findings among the labeler’s target observations, with some special rules |
+| No disease columns equal `1.0`   | No positive NLP-detected labels, but not necessarily a normal patient                                          |
+
+
+Control studies were defined as studies without positive CheXpert labels for the analyzed disease categories.
 
 ## 5. Database
 
