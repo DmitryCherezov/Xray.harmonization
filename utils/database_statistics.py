@@ -1,8 +1,8 @@
 from pathlib import Path
 import sqlite3
 import pandas as pd
-
-
+import matplotlib.pyplot as plt
+import numpy as np
 
 DISEASE_COLUMNS = [
     "atelectasis",
@@ -847,3 +847,192 @@ def print_chexpert_population_statistics(
 
         print(disease_df.to_string(index=False))
         print()
+
+
+def get_exposure_mas_for_three_populations(
+    db_path: str | Path,
+) -> pd.DataFrame:
+    """
+    Extract exposure_mas values for three acquisition populations:
+
+        1. DIRECT, kVp = 90
+        2. DIRECT, kVp = 110
+        3. SCINTILLATOR, kVp = 120
+
+    Returns
+    -------
+    pd.DataFrame
+        Columns:
+            detector_type_code
+            kvp
+            exposure_mas
+            population
+    """
+
+    query = """
+        SELECT
+            detector_type_code,
+            kvp,
+            exposure_mas
+        FROM image_acquisition
+        WHERE
+            exposure_mas IS NOT NULL
+            AND (
+                (UPPER(TRIM(detector_type_code)) = 'DIRECT' AND kvp = 90)
+                OR
+                (UPPER(TRIM(detector_type_code)) = 'DIRECT' AND kvp = 110)
+                OR
+                (UPPER(TRIM(detector_type_code)) = 'SCINTILLATOR' AND kvp = 120)
+            )
+    """
+
+    with sqlite3.connect(db_path) as conn:
+        df = pd.read_sql_query(query, conn)
+
+    df["detector_type_code"] = df["detector_type_code"].str.upper().str.strip()
+
+    df["population"] = (
+        df["detector_type_code"]
+        + ", kVp="
+        + df["kvp"].astype(int).astype(str)
+    )
+
+    return df
+
+
+
+def plot_exposure_mas_histograms_for_three_populations(
+    mas_df: pd.DataFrame,
+    max_x: int = 25,
+) -> None:
+    """
+    Plot independently normalized exposure_mas histograms for:
+
+        DIRECT, kVp=90
+        DIRECT, kVp=110
+        SCINTILLATOR, kVp=120
+
+    Each bin shows:
+
+        number of images in the bin / total number of images in the population
+
+    Therefore, if all values are within [0, max_x], the sum of bins is 1.
+
+    Values > max_x are not corrected here. A message is printed instead.
+    """
+
+    populations = [
+        "DIRECT, kVp=90",
+        "DIRECT, kVp=110",
+        "SCINTILLATOR, kVp=120",
+    ]
+
+    # Bin edges: 0, 1, 2, ..., 25
+    # This gives 25 bins:
+    # [0,1), [1,2), ..., [24,25]
+    bin_edges = np.arange(0, max_x + 1, 1)
+
+    fig, axes = plt.subplots(
+        nrows=1,
+        ncols=3,
+        figsize=(18, 5),
+        sharey=True,
+    )
+
+    for ax, population in zip(axes, populations):
+        values = mas_df.loc[
+            mas_df["population"] == population,
+            "exposure_mas"
+        ].dropna()
+
+        total_n = len(values)
+
+        if total_n == 0:
+            ax.set_title(f"{population}\nN = 0")
+            ax.set_xlabel("Exposure mAs")
+            ax.set_ylabel("Ratio")
+            ax.set_xlim(0, max_x)
+            ax.set_ylim(0, 1)
+            continue
+
+        out_of_range_n = (values > max_x).sum()
+
+        if out_of_range_n > 0:
+            print(
+                f"{population}: {out_of_range_n} images have "
+                f"exposure_mas > {max_x} and are outside the plotting range."
+            )
+
+        values_for_plot = values[values <= max_x]
+
+        counts, _ = np.histogram(
+            values_for_plot,
+            bins=bin_edges,
+        )
+
+        # Normalize by total population size
+        ratios = counts / total_n
+
+        ax.bar(
+            bin_edges[:-1],
+            ratios,
+            width=1.0,
+            align="edge",
+            edgecolor="black",
+            alpha=0.75,
+        )
+
+        ax.set_title(
+            f"{population}\n"
+            f"N = {total_n}, outside range = {out_of_range_n}"
+        )
+        ax.set_xlabel("Exposure mAs")
+        ax.set_xlim(0, max_x)
+        ax.set_ylim(0, 1)
+
+        ax.set_xticks(np.arange(0, max_x + 1, 5))
+
+        ax.set_ylabel("Ratio")
+
+    plt.tight_layout()
+    plt.show()
+
+
+def population_mAs_statistics(
+        mas_df: pd.DataFrame
+        )-> pd.DataFrame:
+        
+    mas_df_d110 = mas_df[mas_df["population"] == "DIRECT, kVp=110"]
+    mean_d110 = mas_df_d110['exposure_mas'].mean()
+    sdev_d110 = mas_df_d110['exposure_mas'].std()
+
+    mas_df_d90 = mas_df[mas_df["population"] == "DIRECT, kVp=90"]
+    mean_d90 = mas_df_d90['exposure_mas'].mean()
+    sdev_d90 = mas_df_d90['exposure_mas'].std()
+
+    mas_df_s120 = mas_df[mas_df["population"] == "DIRECT, kVp=110"]
+    mean_s120 = mas_df_s120['exposure_mas'].mean()
+    sdev_s120 = mas_df_s120['exposure_mas'].std()
+
+    summary_df = pd.DataFrame({
+        "population": [
+            "DIRECT, kVp=90",
+            "DIRECT, kVp=110",
+            "SCINTILLATOR, kVp=120",
+        ],
+        "mean_exposure_mas": [
+            mean_d90,
+            mean_d110,
+            mean_s120,
+        ],
+        "std_exposure_mas": [
+            sdev_d90,
+            sdev_d110,
+            sdev_s120,
+        ],
+    }).round(2)
+
+    return summary_df
+
+
+

@@ -27,6 +27,20 @@ class DataSetsSettings:
     DB_name: Path
     SQL_script: Path
     
+    ap_detection_dataset: Path
+
+    d90_atelectasis_diagnosing_dataset: Path
+    d90_cardiomegality_diagnosing_dataset: Path
+    d90_pleural_effusion_diagnosing_dataset: Path
+
+    d110_atelectasis_diagnosing_dataset: Path
+    d110_cardiomegality_diagnosing_dataset: Path
+    d110_pleural_effusion_diagnosing_dataset: Path
+
+    s120_atelectasis_diagnosing_dataset: Path
+    s120_cardiomegality_diagnosing_dataset: Path
+    s120_pleural_effusion_diagnosing_dataset: Path
+
     @classmethod
     def build(cls, profile:str='default') -> "DataSetsSettings":
         conf = _get_config(profile)
@@ -41,10 +55,45 @@ class DataSetsSettings:
                 conf.get('MIMIC_CXR_JPG_root')
             ),
             DB_name = Path( 'databases' ) / \
-                conf.get('DB_name')
-            ,
+                conf.get('DB_name'),
             SQL_script = Path( 'sql_scripts' ) / \
-                conf.get('SQL_script_name')
+                conf.get('SQL_script_name'),
+
+            ap_detection_dataset = Path(
+                conf.get('AP_DETECTION_DATASET')
+            ),
+
+            d90_atelectasis_diagnosing_dataset = Path(
+                conf.get('D90_ATELECTASIS_DIAGNOSING_DATASET')
+            ),
+            d90_cardiomegality_diagnosing_dataset = Path(
+                conf.get('D90_CARDIOMEGALITY_DIAGNOSING_DATASET')
+            ),
+            d90_pleural_effusion_diagnosing_dataset = Path(
+                conf.get('D90_PLEURAL_EFFUSION_DIAGNOSING_DATASET')
+            ),
+
+            d110_atelectasis_diagnosing_dataset = Path(
+                conf.get('D110_ATELECTASIS_DIAGNOSING_DATASET')
+            ),
+            d110_cardiomegality_diagnosing_dataset = Path(
+                conf.get('D110_CARDIOMEGALITY_DIAGNOSING_DATASET')
+            ),
+            d110_pleural_effusion_diagnosing_dataset = Path(
+                conf.get('D110_PLEURAL_EFFUSION_DIAGNOSING_DATASET')
+            ),
+
+            s120_atelectasis_diagnosing_dataset = Path(
+                conf.get('S120_ATELECTASIS_DIAGNOSING_DATASET')
+            ),
+            s120_cardiomegality_diagnosing_dataset = Path(
+                conf.get('S120_CARDIOMEGALITY_DIAGNOSING_DATASET')
+            ),
+
+            s120_pleural_effusion_diagnosing_dataset = Path(
+                conf.get('S120_PLEURAL_EFFUSION_DIAGNOSING_DATASET')
+            )
+
             
         )
 

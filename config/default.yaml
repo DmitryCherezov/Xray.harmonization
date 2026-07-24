@@ -3,4 +3,15 @@ MIMIC_CXR_root: D:\003.Data\MIMIC-CXR.v2.1-60k
 MIMIC_CXR_JPG_root: D:\003.Data\MIMIC-CXR-JPG.v2.1
 DB_name: mimic-iv-v3.1.db
 SQL_script_name: create_hosp_sqlite.sql
+AP_DETECTION_DATASET: datasets\ap-detection
+D90_ATELECTASIS_DIAGNOSING_DATASET: datasets\atelectasis\d90
+D90_CARDIOMEGALITY_DIAGNOSING_DATASET: datasets\cardiomegality\d90
+D90_PLEURAL_EFFUSION_DIAGNOSING_DATASET: datasets\pleural-effusion\d90
+D110_ATELECTASIS_DIAGNOSING_DATASET: datasets\atelectasis\d110
+D110_CARDIOMEGALITY_DIAGNOSING_DATASET: datasets\cardiomegality\d110
+D110_PLEURAL_EFFUSION_DIAGNOSING_DATASET: datasets\pleural-effusion\d110
+S120_ATELECTASIS_DIAGNOSING_DATASET: datasets\atelectasis\s120
+S120_CARDIOMEGALITY_DIAGNOSING_DATASET: datasets\cardiomegality\s120
+S120_PLEURAL_EFFUSION_DIAGNOSING_DATASET: datasets\pleural-effusion\s120
+
 

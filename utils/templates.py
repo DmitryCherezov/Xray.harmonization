@@ -15,6 +15,12 @@ MIMIC_CXR_JPG_URL = "https://physionet.org/files/mimic-cxr-jpg/2.1.0/mimic-cxr-2
 MIMIC_CXR_JPG_DIAGNOSING_CSV_GZ_PARTS = (
     "physionet.org", "files", "mimic-cxr-jpg", "2.1.0", "mimic-cxr-2.0.0-chexpert.csv.gz"
 )
+MIMIC_CXR_DOWNLOAD_POSTFIX = (
+    "physionet.org",
+    "files",
+    "mimic-cxr",
+    "2.1.0"
+)
 #==============================================================================
 #                   FILE EXTENSIONS
 #==============================================================================

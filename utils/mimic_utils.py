@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import os
 import gzip
 import zipfile
@@ -5,9 +7,11 @@ import tarfile
 import shutil
 import hashlib
 import subprocess
-from pathlib import Path
+from getpass import getpass
+from pathlib import Path, PureWindowsPath
 from types import ModuleType
-from typing import Dict, List
+from typing import Dict, List, Iterable
+from urllib.parse import quote
 
 def download_mimic_iv(
         username: str,
@@ -367,7 +371,190 @@ def unzip_files(root_dir: Path, file_extension: str) -> None:
             raise ValueError(f"Unsupported archive format: {file_path}")
 
 
+def redownload_wrong_files(
+    wrong_files: Iterable[str],
+    server: str,
+    location: str | Path,
+    T: ModuleType,
+    *,
+    attempts: int = 3,
+    timeout: int = 60,
+    verbose: bool = True,
+) -> list[dict[str, str | int]]:
+    """
+    Redownload corrupted or invalid files using wget with authorization.
 
+    The function asks for the username and password once before downloading
+    the files.
+
+    Parameters
+    ----------
+    wrong_files:
+        Relative file paths written in Windows format, for example:
+
+        [
+            r"files\\p11\\p11255297\\s59219146\\"
+            r"24d13b39-8841b72f-ab094eb1-c7beadbd-73c5b505.dcm"
+        ]
+
+    server:
+        Root server URL, for example:
+
+        "https://example.org/dataset"
+
+    location:
+        Local root directory where the dataset is stored.
+
+    attempts:
+        Number of wget download attempts per file.
+
+    timeout:
+        Network timeout in seconds.
+
+    verbose:
+        Print download progress and errors.
+
+    Returns
+    -------
+    list of dict
+        Download results for all requested files.
+    """
+
+    wget_executable = shutil.which("wget")
+
+    if wget_executable is None:
+        raise RuntimeError(
+            "wget was not found. Install wget and make sure it is "
+            "available in the system PATH."
+        )
+
+    username = input("Server login: ").strip()
+
+    if not username:
+        raise ValueError("The server login cannot be empty.")
+
+    password = getpass("Server password: ")
+
+    if not password:
+        raise ValueError("The server password cannot be empty.")
+
+    local_root = os.path.join(
+        Path(location).expanduser().resolve(), 
+        T.MIMIC_CXR_DOWNLOAD_POSTFIX
+    )
+    server_root = server.rstrip("/")
+
+    results: list[dict[str, str | int]] = []
+
+    for raw_relative_path in wrong_files:
+        relative_path = PureWindowsPath(raw_relative_path)
+
+        if relative_path.is_absolute():
+            raise ValueError(
+                "Expected a relative path, but received an absolute path: "
+                f"{raw_relative_path}"
+            )
+
+        if ".." in relative_path.parts:
+            raise ValueError(
+                "Parent-directory traversal is not allowed: "
+                f"{raw_relative_path}"
+            )
+
+        destination_path = local_root.joinpath(*relative_path.parts)
+        destination_path.parent.mkdir(parents=True, exist_ok=True)
+
+        encoded_remote_path = "/".join(
+            quote(part, safe="")
+            for part in relative_path.parts
+        )
+
+        remote_url = f"{server_root}/{encoded_remote_path}"
+
+        temporary_path = destination_path.with_name(
+            destination_path.name + ".part"
+        )
+
+        if temporary_path.exists():
+            temporary_path.unlink()
+
+        command = [
+            wget_executable,
+            "--user",
+            username,
+            "--password",
+            password,
+            "--tries",
+            str(attempts),
+            "--timeout",
+            str(timeout),
+            "--output-document",
+            str(temporary_path),
+            remote_url,
+        ]
+
+        if verbose:
+            print(f"Downloading: {remote_url}")
+            print(f"Destination: {destination_path}")
+
+        completed_process = subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+        if (
+            completed_process.returncode == 0
+            and temporary_path.exists()
+            and temporary_path.stat().st_size > 0
+        ):
+            os.replace(temporary_path, destination_path)
+            status = "downloaded"
+
+            if verbose:
+                print("Status: downloaded successfully\n")
+
+        else:
+            status = "failed"
+
+            if temporary_path.exists():
+                temporary_path.unlink()
+
+            error_message = (
+                completed_process.stderr.strip()
+                or completed_process.stdout.strip()
+                or "wget returned an unspecified error."
+            )
+
+            if verbose:
+                print("Status: failed")
+                print(f"Error: {error_message}\n")
+
+        results.append(
+            {
+                "relative_path": str(relative_path),
+                "remote_url": remote_url,
+                "local_path": str(destination_path),
+                "status": status,
+                "return_code": completed_process.returncode,
+            }
+        )
+
+    successful = sum(
+        result["status"] == "downloaded"
+        for result in results
+    )
+
+    failed = len(results) - successful
+
+    if verbose:
+        print("Download summary")
+        print(f"Requested:  {len(results)}")
+        print(f"Downloaded: {successful}")
+        print(f"Failed:     {failed}")
+
+    return results
 
 
 

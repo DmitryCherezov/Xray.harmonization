@@ -134,7 +134,10 @@ To download the dataset use `python/download_data.ipynb`. It is important to not
 ### 6.2 Aquisition Information Deriving
 
 ### 6.3 Training model for Scanner Type Classification
+#### Labeling and Diagnosing
 
+<p align="justify">
+Based on radiologist feedback, several MIMIC-CXR labels have substantial clinical overlap. Cardiomegaly and enlarged cardiomediastinum can be combined because they describe essentially the same finding. Consolidation and pneumonia may also be merged for practical analysis, since pneumonia is the most common cause of consolidation and is often difficult to distinguish confidently on chest X-ray without clinical information. Lung opacity is a nonspecific finding that may represent consolidation, pneumonia, atelectasis, or pulmonary edema; therefore, it should be treated as a broad overlapping category rather than as a distinct disease. The remaining labels—fracture, lung lesion, pleural effusion, pleural other, pneumothorax, atelectasis, and edema—should generally be considered separate entities.
 
 ### 6.4 Deep Feature Extraction and Analysis
 
