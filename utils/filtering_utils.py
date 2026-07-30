@@ -1,59 +1,26 @@
 from __future__ import annotations
 
-import sqlite3
-from collections import defaultdict
-from pathlib import Path
-from typing import Callable, Hashable, Mapping, Dict, List, Sequence, Tuple, Union
-
-
 import csv
 import random
 import shutil
+import sqlite3
+from collections import defaultdict
+from pathlib import Path
+from typing import Callable, Sequence
 
 import numpy as np
 from PIL import Image
 
-
-PatientID = Hashable
-PatientImages = Mapping[PatientID, Sequence[str | Path]]
-ConvertingFunction = Callable[[str | Path], np.ndarray]
-
-
-
-CLINICAL_CONDITIONS = {
-    "atelectasis",
-    "cardiomegaly",
-    "consolidation",
-    "edema",
-    "enlarged_cardiomediastinum",
-    "fracture",
-    "lung_lesion",
-    "lung_opacity",
-    "no_finding",
-    "pleural_effusion",
-    "pleural_other",
-    "pneumonia",
-    "pneumothorax",
-    "healthy",
-}
-
-# Labels that represent actual findings.
-# no_finding is handled separately and is not treated as a disease.
-DISEASE_COLUMNS = (
-    "atelectasis",
-    "cardiomegaly",
-    "consolidation",
-    "edema",
-    "enlarged_cardiomediastinum",
-    "fracture",
-    "lung_lesion",
-    "lung_opacity",
-    "pleural_effusion",
-    "pleural_other",
-    "pneumonia",
-    "pneumothorax",
+from utils.templates_split import (
+    ClinicalCondition,
+    DetectorType,
+    DISEASE_COLUMNS,
+    SplitNames,
+    SplitType,
+    View,
+    BinaryClassDatasetSplitStatistic,
+    BinaryClassDatasetReadError
 )
-
 
 
 def _calculate_split_counts(
@@ -88,13 +55,13 @@ def _calculate_split_counts(
 
 
 def _weighted_patient_partition(
-    patient_images: PatientImages,
-    split_names: Sequence[str],
+    patient_images: dict[int, list[str]],
+    split_names: Sequence[SplitNames],
     patient_quotas: Sequence[int],
     target_image_counts: Sequence[float],
     random_state: int,
     number_of_trials: int = 100,
-) -> dict[str, list[PatientID]]:
+) -> dict[SplitNames, list[int]]:
     """
     Assign patients to splits while respecting patient quotas and
     approximately matching target image counts.
@@ -121,14 +88,12 @@ def _weighted_patient_partition(
         for patient_id in patients
     }
 
-    best_partition: dict[str, list[PatientID]] | None = None
+    best_partition: dict[SplitNames, list[int]] | None = None
     best_score = float("inf")
 
     for trial in range(number_of_trials):
         rng = random.Random(random_state + trial)
 
-        # Large patients are assigned first. A small random component
-        # allows repeated trials to explore different valid partitions.
         ordered_patients = sorted(
             patients,
             key=lambda patient_id: (
@@ -138,12 +103,12 @@ def _weighted_patient_partition(
             reverse=True,
         )
 
-        partition = {
+        partition: dict[SplitNames, list[int]] = {
             split_name: []
             for split_name in split_names
         }
 
-        current_image_counts = {
+        current_image_counts: dict[SplitNames, int] = {
             split_name: 0
             for split_name in split_names
         }
@@ -195,14 +160,14 @@ def _weighted_patient_partition(
 
 
 def _split_60_20_20(
-    patient_images: PatientImages,
+    patient_images: dict[int, list[str]],
     random_state: int,
-) -> dict[str, list[PatientID]]:
+) -> dict[SplitNames, list[int]]:
     """
     Split one dictionary independently into 60%, 20%, and 20%
     patient-level subsets while balancing image counts.
     """
-    split_names = ("training", "validation", "test")
+    split_names = tuple(SplitNames)
     fractions = (0.60, 0.20, 0.20)
 
     patient_quotas = _calculate_split_counts(
@@ -230,12 +195,12 @@ def _split_60_20_20(
 
 
 def _split_balanced_training(
-    dictionary_a: PatientImages,
-    dictionary_b: PatientImages,
+    dictionary_a: dict[int, list[str]],
+    dictionary_b: dict[int, list[str]],
     random_state: int,
 ) -> tuple[
-    dict[str, list[PatientID]],
-    dict[str, list[PatientID]],
+    dict[SplitNames, list[int]],
+    dict[SplitNames, list[int]],
 ]:
     """
     Create balanced training sets.
@@ -265,16 +230,15 @@ def _split_balanced_training(
         for paths in dictionary_b.values()
     )
 
-    # Common image target for both training classes.
     common_training_image_target = min(
         0.60 * total_images_a,
         0.60 * total_images_b,
     )
 
     def split_one_dictionary(
-        patient_images: PatientImages,
+        patient_images: dict[int, list[str]],
         seed: int,
-    ) -> dict[str, list[PatientID]]:
+    ) -> dict[SplitNames, list[int]]:
         remaining_patient_count = (
             len(patient_images) - training_patient_count
         )
@@ -296,7 +260,7 @@ def _split_balanced_training(
 
         return _weighted_patient_partition(
             patient_images=patient_images,
-            split_names=("training", "validation", "test"),
+            split_names=tuple(SplitNames),
             patient_quotas=(
                 training_patient_count,
                 validation_count,
@@ -394,88 +358,57 @@ def _prepare_array_for_png(image_array: np.ndarray) -> np.ndarray:
     return array
 
 
-
-
-
 def filter_images(
-    db_path: Union[str, Path],
+    db_path: str | Path,
     kvp: float,
-    detector_type: str,
+    detector_type: DetectorType,
     mas_range: Sequence[float],
-    clinical_condition: str,
-    view: str,
-) -> Dict[int, List[str]]:
+    clinical_condition: ClinicalCondition,
+    view: View,
+) -> dict[int, list[str]]:
     """
     Filter images stored in a SQLite database.
 
-    Parameters
-    ----------
-    db_path
-        Path to the SQLite database.
+    For a particular finding, the corresponding label must equal 1.
 
-    kvp
-        Required kVp value. Exact SQL equality is used.
-
-    detector_type
-        Required detector type code.
-
-    mas_range
-        Two-element sequence containing:
-            (minimum_mAs, maximum_mAs)
-
-        Both boundaries are inclusive.
-
-    clinical_condition
-        One of:
-            atelectasis
-            cardiomegaly
-            consolidation
-            edema
-            enlarged_cardiomediastinum
-            fracture
-            lung_lesion
-            lung_opacity
-            no_finding
-            pleural_effusion
-            pleural_other
-            pneumonia
-            pneumothorax
-            healthy
-
-        For a particular finding, the corresponding label must equal 1.
-
-        For "healthy", every disease label in DISEASE_COLUMNS must
-        explicitly equal 0. Values of -1 or NULL are therefore excluded.
-
-        The no_finding label is not used to define "healthy", because it is
-        a separate CheXpert observation. It can be selected explicitly with
-        clinical_condition="no_finding".
-
-    view
-        Required image view code.
-
-    Returns
-    -------
-    dict
-        Dictionary of the form:
-
-        {
-            subject_id: [file_path_1, file_path_2, ...]
-        }
+    For ClinicalCondition.HEALTHY, every disease label in
+    DISEASE_COLUMNS must explicitly equal 0. Values of -1 or NULL
+    are therefore excluded.
     """
     db_path = Path(db_path)
 
     if not db_path.is_file():
-        raise FileNotFoundError(f"SQLite database was not found: {db_path}")
+        raise FileNotFoundError(
+            f"SQLite database was not found: {db_path}"
+        )
 
-    condition = clinical_condition.strip().lower()
+    # Runtime validation is retained even though the parameters are typed.
+    # This also produces a clear error if a raw invalid string is passed.
+    try:
+        detector_type = DetectorType(detector_type)
+    except ValueError as exc:
+        allowed = ", ".join(item.value for item in DetectorType)
+        raise ValueError(
+            f"Unknown detector type: {detector_type!r}. "
+            f"Allowed values are: {allowed}."
+        ) from exc
 
-    if condition not in CLINICAL_CONDITIONS:
-        allowed = ", ".join(sorted(CLINICAL_CONDITIONS))
+    try:
+        clinical_condition = ClinicalCondition(clinical_condition)
+    except ValueError as exc:
+        allowed = ", ".join(item.value for item in ClinicalCondition)
         raise ValueError(
             f"Unknown clinical condition: {clinical_condition!r}. "
-            f"Allowed values are: {allowed}"
-        )
+            f"Allowed values are: {allowed}."
+        ) from exc
+
+    try:
+        view = View(view)
+    except ValueError as exc:
+        allowed = ", ".join(item.value for item in View)
+        raise ValueError(
+            f"Unknown view: {view!r}. Allowed values are: {allowed}."
+        ) from exc
 
     if len(mas_range) != 2:
         raise ValueError(
@@ -491,16 +424,16 @@ def filter_images(
             f"maximum {max_mas}."
         )
 
-    if condition == "healthy":
-        # Strict healthy:
-        # all disease labels must be explicitly equal to zero.
+    if clinical_condition is ClinicalCondition.HEALTHY:
         clinical_filter = " AND ".join(
-            f"cd.{column} = 0" for column in DISEASE_COLUMNS
+            f"cd.{column} = 0"
+            for column in DISEASE_COLUMNS
         )
     else:
-        # Column names cannot be passed as SQL parameters, so the condition
-        # is validated against CLINICAL_CONDITIONS before being inserted.
-        clinical_filter = f"cd.{condition} = 1"
+        # The column name comes from ClinicalCondition, not arbitrary input.
+        clinical_filter = (
+            f"cd.{clinical_condition.value} = 1"
+        )
 
     query = f"""
         SELECT
@@ -524,15 +457,15 @@ def filter_images(
             i.file_path
     """
 
-    parameters: Tuple[float, str, float, float, str] = (
+    parameters: tuple[float, str, float, float, str] = (
         float(kvp),
-        detector_type,
+        detector_type.value,
         min_mas,
         max_mas,
-        view,
+        view.value,
     )
 
-    images_by_patient: defaultdict[int, List[str]] = defaultdict(list)
+    images_by_patient: defaultdict[int, list[str]] = defaultdict(list)
 
     with sqlite3.connect(db_path) as connection:
         cursor = connection.execute(query, parameters)
@@ -544,9 +477,9 @@ def filter_images(
 
 
 def filter_patients(
-    images_dict_1: Dict[int, List[str]],
-    images_dict_2: Dict[int, List[str]],
-) -> List[int]:
+    images_dict_1: dict[int, list[str]],
+    images_dict_2: dict[int, list[str]],
+) -> list[int]:
     """
     Return patient IDs present in both dictionaries.
     """
@@ -555,9 +488,9 @@ def filter_patients(
 
 
 def clear_patients(
-    images_dict_1: Dict[int, List[str]],
-    images_dict_2: Dict[int, List[str]],
-    pids: List[int],
+    images_dict_1: dict[int, list[str]],
+    images_dict_2: dict[int, list[str]],
+    pids: list[int],
 ) -> None:
     """
     Delete the specified patient IDs from the dictionary containing
@@ -582,74 +515,44 @@ def clear_patients(
 def split_datasets(
     dictionary_a: dict[int, list[str]],
     dictionary_b: dict[int, list[str]],
-    split_type: str,
+    split_type: SplitType,
     output_path: str | Path,
     image_converting_function: Callable[[str | Path], np.ndarray] | None = None,
     random_state: int = 42,
-) -> None:
+) -> tuple[
+    dict[BinaryClassDatasetSplitStatistic, int],
+    dict[BinaryClassDatasetReadError, list[str]],
+]:
     """
     Split two image dictionaries and generate image and CSV datasets.
 
-    Parameters
-    ----------
-    dictionary_a
-        Patient dictionary for class 0:
+    dictionary_a represents the negative class, label 0.
+    dictionary_b represents the positive class, label 1.
 
-            {
-                patient_id: [dicom_path_1, dicom_path_2, ...]
-            }
+    Patient statistics contain the number of patients assigned to each
+    split. Image statistics contain only successfully saved images.
 
-    dictionary_b
-        Patient dictionary for class 1.
-
-    split_type
-        Either:
-
-        - "balanced"
-        - "60-20-20"
-
-        In balanced mode, both training classes contain the same
-        patient count: 60% of the smaller dictionary's patient count.
-        Patient image counts are used as weights to minimize class
-        imbalance in terms of images.
-
-        In 60-20-20 mode, each dictionary is split independently.
-
-    output_path
-        Root directory where the generated dataset is written.
-
-    image_converting_function
-        Optional function with this interface:
-
-            image_array = image_converting_function(dicom_path)
-
-        The returned NumPy array is saved as PNG.
-
-        When no function is provided, source files are copied unchanged.
-        Therefore, copied DICOM files remain DICOM files.
-
-    random_state
-        Seed used for reproducible patient-level splitting.
+    Images that cannot be read, converted, copied, or saved are skipped
+    and added to error_report.
 
     Returns
     -------
-    None
-        Files and CSV tables are written to disk.
-    """
-    normalized_split_type = split_type.strip().lower()
-
-    if normalized_split_type not in {
-        "balanced",
-        "60-20-20",
-    }:
-        raise ValueError(
-            "split_type must be either 'balanced' or '60-20-20'."
+    tuple
+        (
+            split_report,
+            error_report,
         )
+    """
+    try:
+        split_type = SplitType(split_type)
+    except ValueError as exc:
+        allowed = ", ".join(item.value for item in SplitType)
+        raise ValueError(
+            f"Unknown split type: {split_type!r}. "
+            f"Allowed values are: {allowed}."
+        ) from exc
 
-    overlapping_patients = (
-        set(dictionary_a.keys())
-        & set(dictionary_b.keys())
-    )
+    overlapping_patients = set(dictionary_a) & set(dictionary_b)
 
     if overlapping_patients:
         raise ValueError(
@@ -669,10 +572,10 @@ def split_datasets(
     images_root = output_path / "images"
     csv_root = output_path / "csv"
 
-    split_names = ("training", "validation", "test")
+    split_names = tuple(SplitNames)
 
     for split_name in split_names:
-        (images_root / split_name).mkdir(
+        (images_root / split_name.value).mkdir(
             parents=True,
             exist_ok=True,
         )
@@ -682,7 +585,7 @@ def split_datasets(
         exist_ok=True,
     )
 
-    if normalized_split_type == "balanced":
+    if split_type is SplitType.BALANCED:
         splits_a, splits_b = _split_balanced_training(
             dictionary_a=dictionary_a,
             dictionary_b=dictionary_b,
@@ -699,7 +602,137 @@ def split_datasets(
             random_state=random_state + 10_000,
         )
 
-    csv_rows = {
+    # Maps a split and class label to the corresponding patient statistic.
+    patient_statistic_keys: dict[
+        tuple[SplitNames, int],
+        BinaryClassDatasetSplitStatistic,
+    ] = {
+        (
+            SplitNames.TRAINING,
+            1,
+        ): BinaryClassDatasetSplitStatistic.TRAIN_POSITIVE_PATIENT_NUM,
+        (
+            SplitNames.TRAINING,
+            0,
+        ): BinaryClassDatasetSplitStatistic.TRAIN_NEGATIVE_PATIENT_NUM,
+        (
+            SplitNames.VALIDATION,
+            1,
+        ): BinaryClassDatasetSplitStatistic.VALIDATION_POSITIVE_PATIENT_NUM,
+        (
+            SplitNames.VALIDATION,
+            0,
+        ): BinaryClassDatasetSplitStatistic.VALIDATION_NEGATIVE_PATIENT_NUM,
+        (
+            SplitNames.TEST,
+            1,
+        ): BinaryClassDatasetSplitStatistic.TEST_POSITIVE_PATIENT_NUM,
+        (
+            SplitNames.TEST,
+            0,
+        ): BinaryClassDatasetSplitStatistic.TEST_NEGATIVE_PATIENT_NUM,
+    }
+
+    # Maps a split and class label to the corresponding image statistic.
+    image_statistic_keys: dict[
+        tuple[SplitNames, int],
+        BinaryClassDatasetSplitStatistic,
+    ] = {
+        (
+            SplitNames.TRAINING,
+            1,
+        ): BinaryClassDatasetSplitStatistic.TRAIN_POSITIVE_IMAGE_NUM,
+        (
+            SplitNames.TRAINING,
+            0,
+        ): BinaryClassDatasetSplitStatistic.TRAIN_NEGATIVE_IMAGE_NUM,
+        (
+            SplitNames.VALIDATION,
+            1,
+        ): BinaryClassDatasetSplitStatistic.VALIDATION_POSITIVE_IMAGE_NUM,
+        (
+            SplitNames.VALIDATION,
+            0,
+        ): BinaryClassDatasetSplitStatistic.VALIDATION_NEGATIVE_IMAGE_NUM,
+        (
+            SplitNames.TEST,
+            1,
+        ): BinaryClassDatasetSplitStatistic.TEST_POSITIVE_IMAGE_NUM,
+        (
+            SplitNames.TEST,
+            0,
+        ): BinaryClassDatasetSplitStatistic.TEST_NEGATIVE_IMAGE_NUM,
+    }
+
+    # Maps a split and class label to the corresponding error category.
+    error_report_keys: dict[
+        tuple[SplitNames, int],
+        BinaryClassDatasetReadError,
+    ] = {
+        (
+            SplitNames.TRAINING,
+            1,
+        ): BinaryClassDatasetReadError.TRAIN_POSITIVE,
+        (
+            SplitNames.TRAINING,
+            0,
+        ): BinaryClassDatasetReadError.TRAIN_NEGATIVE,
+        (
+            SplitNames.VALIDATION,
+            1,
+        ): BinaryClassDatasetReadError.VALIDATION_POSITIVE,
+        (
+            SplitNames.VALIDATION,
+            0,
+        ): BinaryClassDatasetReadError.VALIDATION_NEGATIVE,
+        (
+            SplitNames.TEST,
+            1,
+        ): BinaryClassDatasetReadError.TEST_POSITIVE,
+        (
+            SplitNames.TEST,
+            0,
+        ): BinaryClassDatasetReadError.TEST_NEGATIVE,
+    }
+
+    # Initialize every statistic with zero.
+    split_report: dict[
+        BinaryClassDatasetSplitStatistic,
+        int,
+    ] = {
+        statistic: 0
+        for statistic in BinaryClassDatasetSplitStatistic
+    }
+
+    # Initialize every error category with an empty list.
+    error_report: dict[
+        BinaryClassDatasetReadError,
+        list[str],
+    ] = {
+        error_type: []
+        for error_type in BinaryClassDatasetReadError
+    }
+
+    # Patient counts are based on patients assigned to each split,
+    # independently of whether individual images can be processed.
+    for label, patient_splits in (
+        (0, splits_a),
+        (1, splits_b),
+    ):
+        for split_name in split_names:
+            statistic_key = patient_statistic_keys[
+                split_name,
+                label,
+            ]
+
+            split_report[statistic_key] = len(
+                patient_splits[split_name]
+            )
+
+    csv_rows: dict[
+        SplitNames,
+        list[dict[str, str | int]],
+    ] = {
         split_name: []
         for split_name in split_names
     }
@@ -709,51 +742,87 @@ def split_datasets(
         (1, dictionary_b, splits_b),
     ):
         for split_name in split_names:
-            destination_folder = images_root / split_name
+            destination_folder = (
+                images_root / split_name.value
+            )
+
+            image_statistic_key = image_statistic_keys[
+                split_name,
+                label,
+            ]
+
+            error_report_key = error_report_keys[
+                split_name,
+                label,
+            ]
 
             for patient_id in patient_splits[split_name]:
                 source_paths = patient_dictionary[patient_id]
 
-                for image_index, source_path in enumerate(source_paths):
-                    source_path = Path(source_path)
+                for source_path_value in source_paths:
+                    source_path = Path(source_path_value)
+                    destination_path: Path | None = None
 
-                    if not source_path.is_file():
-                        raise FileNotFoundError(
-                            f"Image was not found: {source_path}"
-                        )
+                    try:
+                        if not source_path.is_file():
+                            raise FileNotFoundError(
+                                f"Image was not found: {source_path}"
+                            )
 
-                    if image_converting_function is None:
-                        destination_path = (
-                            destination_folder / source_path.name
-                        )
+                        pid = source_path.parent.parent.name
+                        sid = source_path.parent.name
+                        iid = source_path.stem
 
-                        shutil.copy2(
-                            source_path,
-                            destination_path,
-                        )
-                    else:
-                        destination_name = (
-                            f"{source_path.stem}.png"
-                        )
+                        if image_converting_function is None:
+                            destination_path = (
+                                destination_folder
+                                / f"{pid}_{sid}_{source_path.name}"
+                            )
 
-                        destination_path = (
-                            destination_folder / destination_name
-                        )
-                        try:
+                            shutil.copy2(
+                                source_path,
+                                destination_path,
+                            )
+                        else:
+                            destination_path = (
+                                destination_folder
+                                / f"{pid}_{sid}_{iid}.png"
+                            )
+
                             image_array = image_converting_function(
                                 source_path
                             )
-                        except Exception as error:
-                            print(f"Failed image: {source_path}")
-                            raise
 
-                        image_array = _prepare_array_for_png(
-                            image_array
+                            image_array = _prepare_array_for_png(
+                                image_array
+                            )
+
+                            Image.fromarray(image_array).save(
+                                destination_path
+                            )
+
+                    except Exception as error:
+                        # Remove a partially created output file, if any.
+                        if (
+                            destination_path is not None
+                            and destination_path.exists()
+                        ):
+                            destination_path.unlink()
+
+                        error_report[error_report_key].append(
+                            str(source_path)
                         )
 
-                        Image.fromarray(image_array).save(
-                            destination_path
+                        print(
+                            f"Failed image: {source_path}. "
+                            f"Error: {error}"
                         )
+
+                        continue
+
+                    # This point is reached only after successful
+                    # copying or PNG generation.
+                    split_report[image_statistic_key] += 1
 
                     csv_rows[split_name].append(
                         {
@@ -765,7 +834,7 @@ def split_datasets(
                     )
 
     for split_name in split_names:
-        csv_path = csv_root / f"{split_name}.csv"
+        csv_path = csv_root / f"{split_name.value}.csv"
 
         with csv_path.open(
             "w",
@@ -780,4 +849,4 @@ def split_datasets(
             writer.writeheader()
             writer.writerows(csv_rows[split_name])
 
-
+    return split_report, error_report

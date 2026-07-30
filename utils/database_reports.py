@@ -1,4 +1,10 @@
+from __future__ import annotations
+
+import os
+from io import BytesIO
 from pathlib import Path
+from typing import Mapping, Sequence
+from xml.sax.saxutils import escape
 
 import pandas as pd
 from reportlab.lib import colors
@@ -15,6 +21,12 @@ from reportlab.platypus import (
     PageBreak,
 )
 
+from utils.templates_split import (
+    BinaryClassDatasetReadError,
+    BinaryClassDatasetSplitStatistic
+)
+
+from .experiments_metadata import DatasetReportMetadata
 
 def dataframe_to_reportlab_table(df: pd.DataFrame) -> Table:
     """
@@ -642,4 +654,839 @@ def generate_disease_aquisition_pdf_report(
     doc.build(story)
 
     print(f"PDF report saved to: {output_pdf_path}")
+# ======================================================================
+# Binary dataset split report
+# ======================================================================
 
+_BINARY_DATASET_ERROR_PATH_LIMIT = 10
+
+
+def _validate_binary_dataset_report_paths(
+    output_paths: Sequence[str | Path],
+) -> list[Path]:
+    """
+    Validate complete output paths for identical PDF copies.
+
+    All paths must be absolute, unique, use the .pdf extension, and
+    must not already exist.
+    """
+    if isinstance(output_paths, (str, Path)):
+        raise TypeError(
+            "output_paths must be a sequence of complete PDF paths, "
+            "not a single path."
+        )
+
+    paths = [Path(path).expanduser() for path in output_paths]
+
+    if not paths:
+        raise ValueError(
+            "output_paths must contain at least one PDF path."
+        )
+
+    normalized_paths: set[str] = set()
+
+    for path in paths:
+        if not path.is_absolute():
+            raise ValueError(
+                f"Output path must be absolute: {path}"
+            )
+
+        if path.suffix.lower() != ".pdf":
+            raise ValueError(
+                f"Output path must have a .pdf extension: {path}"
+            )
+
+        normalized_path = os.path.normcase(
+            str(path.resolve(strict=False))
+        )
+
+        if normalized_path in normalized_paths:
+            raise ValueError(
+                f"Duplicate output path: {path}"
+            )
+
+        normalized_paths.add(normalized_path)
+
+        if path.exists():
+            raise FileExistsError(
+                f"Output PDF already exists: {path}"
+            )
+
+    return paths
+
+
+def _validate_dataset_report_metadata(
+    metadata: DatasetReportMetadata,
+) -> None:
+    """
+    Ensure that every required metadata field contains non-empty text.
+    """
+    metadata_fields = {
+        "title": metadata.title,
+        "task_description": metadata.task_description,
+        "labeling": metadata.labeling,
+        "positive_class_description": (
+            metadata.positive_class_description
+        ),
+        "negative_class_description": (
+            metadata.negative_class_description
+        ),
+        "inclusion_criteria": metadata.inclusion_criteria,
+        "exclusion_criteria": metadata.exclusion_criteria,
+    }
+
+    for field_name, value in metadata_fields.items():
+        if not isinstance(value, str):
+            raise TypeError(
+                f"metadata.{field_name} must be a string."
+            )
+
+        if not value.strip():
+            raise ValueError(
+                f"metadata.{field_name} must not be empty."
+            )
+
+
+def _get_split_statistic(
+    split_report: Mapping[
+        BinaryClassDatasetSplitStatistic,
+        int,
+    ],
+    key: BinaryClassDatasetSplitStatistic,
+) -> int:
+    """
+    Read and validate one non-negative split statistic.
+    """
+    if key not in split_report:
+        raise KeyError(
+            f"Missing split statistic: {key.value}"
+        )
+
+    value = split_report[key]
+
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise TypeError(
+            f"Split statistic {key.value!r} must be an integer."
+        )
+
+    if value < 0:
+        raise ValueError(
+            f"Split statistic {key.value!r} must not be negative."
+        )
+
+    return value
+
+
+def _get_dataset_error_paths(
+    error_report: Mapping[
+        BinaryClassDatasetReadError,
+        Sequence[str],
+    ],
+    key: BinaryClassDatasetReadError,
+) -> list[str]:
+    """
+    Read one error category and normalize its paths to strings.
+    """
+    if key not in error_report:
+        raise KeyError(
+            f"Missing read-error category: {key.value}"
+        )
+
+    values = error_report[key]
+
+    if isinstance(values, (str, bytes)):
+        raise TypeError(
+            f"Read-error category {key.value!r} "
+            "must contain a sequence of paths."
+        )
+
+    return [str(path) for path in values]
+
+
+def _make_wrapped_path_table(
+    paths: Sequence[str],
+    styles,
+) -> Table:
+    """
+    Build a one-column table in which long file paths can wrap.
+    """
+    path_style = ParagraphStyle(
+        name="DatasetErrorPath",
+        parent=styles["Normal"],
+        fontSize=7,
+        leading=9,
+        wordWrap="CJK",
+    )
+
+    header_style = ParagraphStyle(
+        name="DatasetErrorPathHeader",
+        parent=path_style,
+        fontName="Helvetica-Bold",
+        alignment=TA_LEFT,
+    )
+
+    table_data = [
+        [Paragraph("Source path", header_style)]
+    ]
+
+    table_data.extend(
+        [
+            [
+                Paragraph(
+                    escape(path),
+                    path_style,
+                )
+            ]
+            for path in paths
+        ]
+    )
+
+    table = Table(
+        table_data,
+        colWidths=[25.0 * cm],
+        repeatRows=1,
+        hAlign="LEFT",
+    )
+
+    table.setStyle(
+        TableStyle(
+            [
+                (
+                    "BACKGROUND",
+                    (0, 0),
+                    (-1, 0),
+                    colors.lightgrey,
+                ),
+                (
+                    "FONTNAME",
+                    (0, 0),
+                    (-1, 0),
+                    "Helvetica-Bold",
+                ),
+                (
+                    "GRID",
+                    (0, 0),
+                    (-1, -1),
+                    0.25,
+                    colors.grey,
+                ),
+                (
+                    "VALIGN",
+                    (0, 0),
+                    (-1, -1),
+                    "TOP",
+                ),
+                (
+                    "TOPPADDING",
+                    (0, 0),
+                    (-1, -1),
+                    4,
+                ),
+                (
+                    "BOTTOMPADDING",
+                    (0, 0),
+                    (-1, -1),
+                    4,
+                ),
+                (
+                    "LEFTPADDING",
+                    (0, 0),
+                    (-1, -1),
+                    4,
+                ),
+                (
+                    "RIGHTPADDING",
+                    (0, 0),
+                    (-1, -1),
+                    4,
+                ),
+            ]
+        )
+    )
+
+    return table
+
+
+def generate_binary_dataset_pdf_report(
+    metadata: DatasetReportMetadata,
+    split_report: Mapping[
+        BinaryClassDatasetSplitStatistic,
+        int,
+    ],
+    error_report: Mapping[
+        BinaryClassDatasetReadError,
+        Sequence[str],
+    ],
+    output_paths: Sequence[str | Path],
+) -> None:
+    """
+    Generate identical PDF copies of a binary dataset split report.
+
+    Parameters
+    ----------
+    metadata
+        Dataset title, task description, labeling information, class
+        definitions, and inclusion/exclusion criteria.
+
+    split_report
+        Patient counts and successfully saved image counts returned by
+        split_datasets.
+
+    error_report
+        Source paths for images that could not be processed, grouped by
+        split and class.
+
+    output_paths
+        Complete absolute paths for the PDF copies.
+
+    Raises
+    ------
+    ValueError
+        If metadata, statistics, or output paths are invalid.
+
+    KeyError
+        If a required statistic or error category is missing.
+
+    FileExistsError
+        If any requested output file already exists.
+
+    Notes
+    -----
+    Existing files are never overwritten. If saving one copy fails,
+    copies already created during the current call are removed.
+    """
+    paths = _validate_binary_dataset_report_paths(output_paths)
+    _validate_dataset_report_metadata(metadata)
+
+    split_definitions = (
+        (
+            "Training",
+            BinaryClassDatasetSplitStatistic
+            .TRAIN_NEGATIVE_PATIENT_NUM,
+            BinaryClassDatasetSplitStatistic
+            .TRAIN_POSITIVE_PATIENT_NUM,
+            BinaryClassDatasetSplitStatistic
+            .TRAIN_NEGATIVE_IMAGE_NUM,
+            BinaryClassDatasetSplitStatistic
+            .TRAIN_POSITIVE_IMAGE_NUM,
+            BinaryClassDatasetReadError.TRAIN_NEGATIVE,
+            BinaryClassDatasetReadError.TRAIN_POSITIVE,
+        ),
+        (
+            "Validation",
+            BinaryClassDatasetSplitStatistic
+            .VALIDATION_NEGATIVE_PATIENT_NUM,
+            BinaryClassDatasetSplitStatistic
+            .VALIDATION_POSITIVE_PATIENT_NUM,
+            BinaryClassDatasetSplitStatistic
+            .VALIDATION_NEGATIVE_IMAGE_NUM,
+            BinaryClassDatasetSplitStatistic
+            .VALIDATION_POSITIVE_IMAGE_NUM,
+            BinaryClassDatasetReadError.VALIDATION_NEGATIVE,
+            BinaryClassDatasetReadError.VALIDATION_POSITIVE,
+        ),
+        (
+            "Test",
+            BinaryClassDatasetSplitStatistic
+            .TEST_NEGATIVE_PATIENT_NUM,
+            BinaryClassDatasetSplitStatistic
+            .TEST_POSITIVE_PATIENT_NUM,
+            BinaryClassDatasetSplitStatistic
+            .TEST_NEGATIVE_IMAGE_NUM,
+            BinaryClassDatasetSplitStatistic
+            .TEST_POSITIVE_IMAGE_NUM,
+            BinaryClassDatasetReadError.TEST_NEGATIVE,
+            BinaryClassDatasetReadError.TEST_POSITIVE,
+        ),
+    )
+
+    statistics_rows: list[dict[str, str | int]] = []
+    error_rows: list[dict[str, str | int]] = []
+    error_categories: list[
+        tuple[str, str, list[str]]
+    ] = []
+
+    for (
+        split_name,
+        negative_patient_key,
+        positive_patient_key,
+        negative_image_key,
+        positive_image_key,
+        negative_error_key,
+        positive_error_key,
+    ) in split_definitions:
+        statistics_rows.append(
+            {
+                "split": split_name,
+                "negative_patients": _get_split_statistic(
+                    split_report,
+                    negative_patient_key,
+                ),
+                "positive_patients": _get_split_statistic(
+                    split_report,
+                    positive_patient_key,
+                ),
+                "negative_images": _get_split_statistic(
+                    split_report,
+                    negative_image_key,
+                ),
+                "positive_images": _get_split_statistic(
+                    split_report,
+                    positive_image_key,
+                ),
+            }
+        )
+
+        negative_errors = _get_dataset_error_paths(
+            error_report,
+            negative_error_key,
+        )
+        positive_errors = _get_dataset_error_paths(
+            error_report,
+            positive_error_key,
+        )
+
+        error_rows.extend(
+            [
+                {
+                    "split": split_name,
+                    "class": "Negative",
+                    "failed_images": len(negative_errors),
+                },
+                {
+                    "split": split_name,
+                    "class": "Positive",
+                    "failed_images": len(positive_errors),
+                },
+            ]
+        )
+
+        error_categories.extend(
+            [
+                (
+                    split_name,
+                    "Negative",
+                    negative_errors,
+                ),
+                (
+                    split_name,
+                    "Positive",
+                    positive_errors,
+                ),
+            ]
+        )
+
+    statistics_df = pd.DataFrame(statistics_rows)
+
+    statistics_total = {
+        "split": "Total",
+        "negative_patients": int(
+            statistics_df["negative_patients"].sum()
+        ),
+        "positive_patients": int(
+            statistics_df["positive_patients"].sum()
+        ),
+        "negative_images": int(
+            statistics_df["negative_images"].sum()
+        ),
+        "positive_images": int(
+            statistics_df["positive_images"].sum()
+        ),
+    }
+
+    statistics_df = pd.concat(
+        [
+            statistics_df,
+            pd.DataFrame([statistics_total]),
+        ],
+        ignore_index=True,
+    )
+
+    errors_df = pd.DataFrame(error_rows)
+
+    errors_df = pd.concat(
+        [
+            errors_df,
+            pd.DataFrame(
+                [
+                    {
+                        "split": "Total",
+                        "class": "All classes",
+                        "failed_images": int(
+                            errors_df["failed_images"].sum()
+                        ),
+                    }
+                ]
+            ),
+        ],
+        ignore_index=True,
+    )
+
+    negative_patient_total = int(
+        statistics_df.iloc[:-1]["negative_patients"].sum()
+    )
+    positive_patient_total = int(
+        statistics_df.iloc[:-1]["positive_patients"].sum()
+    )
+    negative_image_total = int(
+        statistics_df.iloc[:-1]["negative_images"].sum()
+    )
+    positive_image_total = int(
+        statistics_df.iloc[:-1]["positive_images"].sum()
+    )
+
+    negative_error_total = sum(
+        len(error_paths)
+        for _, class_name, error_paths in error_categories
+        if class_name == "Negative"
+    )
+    positive_error_total = sum(
+        len(error_paths)
+        for _, class_name, error_paths in error_categories
+        if class_name == "Positive"
+    )
+
+    patient_total = (
+        negative_patient_total
+        + positive_patient_total
+    )
+    saved_image_total = (
+        negative_image_total
+        + positive_image_total
+    )
+    error_total = (
+        negative_error_total
+        + positive_error_total
+    )
+    attempted_image_total = (
+        saved_image_total
+        + error_total
+    )
+
+    error_rate = (
+        100.0 * error_total / attempted_image_total
+        if attempted_image_total
+        else 0.0
+    )
+
+    summary_df = pd.DataFrame(
+        [
+            {
+                "metric": "Patients",
+                "negative": negative_patient_total,
+                "positive": positive_patient_total,
+                "total": patient_total,
+            },
+            {
+                "metric": "Successfully saved images",
+                "negative": negative_image_total,
+                "positive": positive_image_total,
+                "total": saved_image_total,
+            },
+            {
+                "metric": "Processing errors",
+                "negative": negative_error_total,
+                "positive": positive_error_total,
+                "total": error_total,
+            },
+            {
+                "metric": "Attempted images",
+                "negative": (
+                    negative_image_total
+                    + negative_error_total
+                ),
+                "positive": (
+                    positive_image_total
+                    + positive_error_total
+                ),
+                "total": attempted_image_total,
+            },
+        ]
+    )
+
+    styles = getSampleStyleSheet()
+
+    body_style = ParagraphStyle(
+        name="DatasetReportBody",
+        parent=styles["Normal"],
+        alignment=TA_LEFT,
+        fontSize=9,
+        leading=13,
+    )
+
+    section_style = ParagraphStyle(
+        name="DatasetReportSection",
+        parent=styles["Heading2"],
+        spaceBefore=0.35 * cm,
+        spaceAfter=0.15 * cm,
+    )
+
+    story = [
+        Paragraph(
+            escape(metadata.title),
+            styles["Title"],
+        ),
+        Spacer(1, 0.4 * cm),
+        Paragraph(
+            "Task Description",
+            section_style,
+        ),
+        Paragraph(
+            escape(metadata.task_description).replace(
+                "\n",
+                "<br/>",
+            ),
+            body_style,
+        ),
+        Paragraph(
+            "Labeling",
+            section_style,
+        ),
+        Paragraph(
+            escape(metadata.labeling).replace(
+                "\n",
+                "<br/>",
+            ),
+            body_style,
+        ),
+        Paragraph(
+            "Class Definitions",
+            section_style,
+        ),
+    ]
+
+    class_df = pd.DataFrame(
+        [
+            {
+                "class": "Negative",
+                "label": 0,
+                "description": (
+                    metadata.negative_class_description
+                ),
+            },
+            {
+                "class": "Positive",
+                "label": 1,
+                "description": (
+                    metadata.positive_class_description
+                ),
+            },
+        ]
+    )
+
+    story.append(
+        _dataframe_to_reportlab_table(
+            class_df,
+            column_widths=[
+                3.0 * cm,
+                2.0 * cm,
+                20.0 * cm,
+            ],
+        )
+    )
+
+    story.extend(
+        [
+            Paragraph(
+                "Inclusion Criteria",
+                section_style,
+            ),
+            Paragraph(
+                escape(metadata.inclusion_criteria).replace(
+                    "\n",
+                    "<br/>",
+                ),
+                body_style,
+            ),
+            Paragraph(
+                "Exclusion Criteria",
+                section_style,
+            ),
+            Paragraph(
+                escape(metadata.exclusion_criteria).replace(
+                    "\n",
+                    "<br/>",
+                ),
+                body_style,
+            ),
+            Paragraph(
+                "Dataset Split Statistics",
+                section_style,
+            ),
+            _dataframe_to_reportlab_table(
+                statistics_df,
+                column_widths=[
+                    4.0 * cm,
+                    5.0 * cm,
+                    5.0 * cm,
+                    5.0 * cm,
+                    5.0 * cm,
+                ],
+            ),
+            Paragraph(
+                "Processing Errors",
+                section_style,
+            ),
+            Paragraph(
+                "Failed images are excluded from the successful "
+                "image counts and from the generated CSV files.",
+                body_style,
+            ),
+            _dataframe_to_reportlab_table(
+                errors_df,
+                column_widths=[
+                    6.0 * cm,
+                    6.0 * cm,
+                    6.0 * cm,
+                ],
+            ),
+        ]
+    )
+
+    if error_total == 0:
+        story.extend(
+            [
+                Spacer(1, 0.15 * cm),
+                Paragraph(
+                    "No processing errors were recorded.",
+                    body_style,
+                ),
+            ]
+        )
+    else:
+        story.append(
+            Paragraph(
+                "Error Path Examples",
+                section_style,
+            )
+        )
+
+        for (
+            split_name,
+            class_name,
+            error_paths,
+        ) in error_categories:
+            if not error_paths:
+                continue
+
+            displayed_paths = error_paths[
+                :_BINARY_DATASET_ERROR_PATH_LIMIT
+            ]
+
+            story.extend(
+                [
+                    Paragraph(
+                        (
+                            f"{split_name} - {class_name} "
+                            f"({len(error_paths)} failed images)"
+                        ),
+                        styles["Heading3"],
+                    ),
+                    _make_wrapped_path_table(
+                        displayed_paths,
+                        styles,
+                    ),
+                ]
+            )
+
+            omitted_count = (
+                len(error_paths)
+                - len(displayed_paths)
+            )
+
+            if omitted_count:
+                story.append(
+                    Paragraph(
+                        (
+                            f"{omitted_count} additional path(s) "
+                            "are not shown in this PDF."
+                        ),
+                        body_style,
+                    )
+                )
+
+    story.extend(
+        [
+            Paragraph(
+                "Dataset Summary",
+                section_style,
+            ),
+            _dataframe_to_reportlab_table(
+                summary_df,
+                column_widths=[
+                    9.0 * cm,
+                    5.0 * cm,
+                    5.0 * cm,
+                    5.0 * cm,
+                ],
+            ),
+            Spacer(1, 0.15 * cm),
+            Paragraph(
+                (
+                    "Overall processing error rate: "
+                    f"{error_rate:.2f}%."
+                ),
+                body_style,
+            ),
+        ]
+    )
+
+    def draw_page_number(canvas, document) -> None:
+        canvas.saveState()
+        canvas.setFont("Helvetica", 8)
+        canvas.setFillColor(colors.grey)
+        canvas.drawRightString(
+            landscape(A4)[0] - 1.2 * cm,
+            0.65 * cm,
+            f"Page {document.page}",
+        )
+        canvas.restoreState()
+
+    pdf_buffer = BytesIO()
+
+    document = SimpleDocTemplate(
+        pdf_buffer,
+        pagesize=landscape(A4),
+        rightMargin=1.2 * cm,
+        leftMargin=1.2 * cm,
+        topMargin=1.2 * cm,
+        bottomMargin=1.2 * cm,
+        title=metadata.title,
+        subject="Binary dataset split report",
+        creator="Python ReportLab",
+    )
+
+    document.build(
+        story,
+        onFirstPage=draw_page_number,
+        onLaterPages=draw_page_number,
+    )
+
+    pdf_bytes = pdf_buffer.getvalue()
+    pdf_buffer.close()
+
+    for path in paths:
+        path.parent.mkdir(
+            parents=True,
+            exist_ok=True,
+        )
+
+    written_paths: list[Path] = []
+
+    try:
+        for path in paths:
+            with path.open("xb") as pdf_file:
+                pdf_file.write(pdf_bytes)
+                pdf_file.flush()
+                os.fsync(pdf_file.fileno())
+
+            written_paths.append(path)
+
+    except BaseException:
+        for written_path in reversed(written_paths):
+            try:
+                written_path.unlink(missing_ok=True)
+            except OSError:
+                pass
+
+        raise
