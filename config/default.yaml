@@ -3,7 +3,9 @@ MIMIC_CXR_root: D:\003.Data\MIMIC-CXR.v2.1-60k
 MIMIC_CXR_JPG_root: D:\003.Data\MIMIC-CXR-JPG.v2.1
 DB_name: mimic-iv-v3.1.db
 SQL_script_name: create_hosp_sqlite.sql
-AP_DETECTION_DATASET: datasets\ap-detection
+AP_DETECTION_CONFIG: datasets\ap-detection
+AP_DETECTION_DATA: datasets\ap-detection
+AP_DETECTION_VERSION: v1.0.0
 D90_ATELECTASIS_DIAGNOSING_DATASET: datasets\atelectasis\d90
 D90_CARDIOMEGALITY_DIAGNOSING_DATASET: datasets\cardiomegality\d90
 D90_PLEURAL_EFFUSION_DIAGNOSING_DATASET: datasets\pleural-effusion\d90

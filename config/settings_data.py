@@ -27,8 +27,11 @@ class DataSetsSettings:
     DB_name: Path
     SQL_script: Path
     
-    ap_detection_dataset: Path
+    ap_detection_config: Path
+    ap_detection_data: Path
+    ap_detection_version: str
 
+    ### Need to update the rest of the datasets
     d90_atelectasis_diagnosing_dataset: Path
     d90_cardiomegality_diagnosing_dataset: Path
     d90_pleural_effusion_diagnosing_dataset: Path
@@ -59,8 +62,16 @@ class DataSetsSettings:
             SQL_script = Path( 'sql_scripts' ) / \
                 conf.get('SQL_script_name'),
 
-            ap_detection_dataset = Path(
-                conf.get('AP_DETECTION_DATASET')
+            ap_detection_config = Path(
+                conf.get('AP_DETECTION_CONFIG')
+            ),
+
+            ap_detection_data = Path(
+                conf.get('AP_DETECTION_DATA')
+            ),
+
+            ap_detection_version = str(
+                            conf.get('AP_DETECTION_VERSION')
             ),
 
             d90_atelectasis_diagnosing_dataset = Path(

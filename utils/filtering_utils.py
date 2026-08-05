@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import os
+from datetime import datetime, timezone
+
+import yaml
 import csv
 import random
 import shutil
@@ -512,11 +516,79 @@ def clear_patients(
 
 
 
+
+def _validate_version(version: str) -> str:
+    """
+    Validate that version is a single directory name, not a path.
+    """
+    if not isinstance(version, str):
+        raise TypeError("version must be a string.")
+
+    if not version:
+        raise ValueError("version must not be empty.")
+
+    if version != version.strip():
+        raise ValueError(
+            "version must not contain leading or trailing whitespace."
+        )
+
+    version_path = Path(version)
+
+    if (
+        version in {".", ".."}
+        or version_path.is_absolute()
+        or bool(version_path.drive)
+        or "/" in version
+        or "\\" in version
+        or len(version_path.parts) != 1
+    ):
+        raise ValueError(
+            "version must be a single directory name. "
+            "Absolute paths, '.', '..', '/' and '\\' are not allowed."
+        )
+
+    return version
+
+
+def _path_reference(
+    target_path: Path,
+    certificate_directory: Path,
+) -> dict[str, str]:
+    """
+    Create a path reference for certificate.yaml.
+
+    Relative paths are preferred. On Windows, an absolute path is used
+    when target_path and certificate_directory are on different drives.
+    """
+    target_path = target_path.resolve()
+    certificate_directory = certificate_directory.resolve()
+
+    try:
+        relative_path = os.path.relpath(
+            target_path,
+            start=certificate_directory,
+        )
+    except ValueError:
+        return {
+            "path": str(target_path),
+            "path_type": "absolute",
+        }
+
+    return {
+        "path": Path(relative_path).as_posix(),
+        "path_type": "relative",
+        "relative_to": "certificate_directory",
+    }
+
+
 def split_datasets(
     dictionary_a: dict[int, list[str]],
     dictionary_b: dict[int, list[str]],
     split_type: SplitType,
-    output_path: str | Path,
+    dataset_name: str,
+    config_path: str | Path,
+    data_path: str | Path,
+    version: str,
     image_converting_function: Callable[[str | Path], np.ndarray] | None = None,
     random_state: int = 42,
 ) -> tuple[
@@ -524,16 +596,47 @@ def split_datasets(
     dict[BinaryClassDatasetReadError, list[str]],
 ]:
     """
-    Split two image dictionaries and generate image and CSV datasets.
+    Split two image dictionaries and generate a versioned binary dataset.
 
     dictionary_a represents the negative class, label 0.
     dictionary_b represents the positive class, label 1.
+
+    The generated structure is:
+
+        config_path/
+            version/
+                config/
+                    csv/
+                        training.csv
+                        validation.csv
+                        test.csv
+                    certificate.yaml
+
+        data_path/
+            version/
+                data/
+                    training/
+                    validation/
+                    test/
+
+    config_path and data_path may point to the same task directory or
+    to different task directories.
+
+    Paths stored in CSV files are relative to:
+
+        data_path / version / "data"
+
+    If either version directory already exists, FileExistsError is
+    raised.
 
     Patient statistics contain the number of patients assigned to each
     split. Image statistics contain only successfully saved images.
 
     Images that cannot be read, converted, copied, or saved are skipped
     and added to error_report.
+
+    If a fatal error occurs after output creation begins, all version
+    directories created by this call are removed.
 
     Returns
     -------
@@ -546,11 +649,25 @@ def split_datasets(
     try:
         split_type = SplitType(split_type)
     except ValueError as exc:
-        allowed = ", ".join(item.value for item in SplitType)
+        allowed = ", ".join(
+            item.value
+            for item in SplitType
+        )
+
         raise ValueError(
             f"Unknown split type: {split_type!r}. "
             f"Allowed values are: {allowed}."
         ) from exc
+
+    if not isinstance(dataset_name, str):
+        raise TypeError("dataset_name must be a string.")
+
+    dataset_name = dataset_name.strip()
+
+    if not dataset_name:
+        raise ValueError("dataset_name must not be empty.")
+
+    version = _validate_version(version)
 
     overlapping_patients = set(dictionary_a) & set(dictionary_b)
 
@@ -567,23 +684,36 @@ def split_datasets(
     if not dictionary_b:
         raise ValueError("dictionary_b is empty.")
 
-    output_path = Path(output_path)
+    config_path = Path(config_path).expanduser()
+    data_path = Path(data_path).expanduser()
 
-    images_root = output_path / "images"
-    csv_root = output_path / "csv"
+    config_version_root = config_path / version
+    data_version_root = data_path / version
 
-    split_names = tuple(SplitNames)
+    config_version_resolved = config_version_root.resolve()
+    data_version_resolved = data_version_root.resolve()
 
-    for split_name in split_names:
-        (images_root / split_name.value).mkdir(
-            parents=True,
-            exist_ok=True,
+    if config_version_root.exists():
+        raise FileExistsError(
+            f"Configuration version already exists: "
+            f"{config_version_root}"
         )
 
-    csv_root.mkdir(
-        parents=True,
-        exist_ok=True,
-    )
+    if (
+        data_version_resolved != config_version_resolved
+        and data_version_root.exists()
+    ):
+        raise FileExistsError(
+            f"Data version already exists: "
+            f"{data_version_root}"
+        )
+
+    config_root = config_version_root / "config"
+    csv_root = config_root / "csv"
+
+    data_root = data_version_root / "data"
+
+    split_names = tuple(SplitNames)
 
     if split_type is SplitType.BALANCED:
         splits_a, splits_b = _split_balanced_training(
@@ -602,7 +732,6 @@ def split_datasets(
             random_state=random_state + 10_000,
         )
 
-    # Maps a split and class label to the corresponding patient statistic.
     patient_statistic_keys: dict[
         tuple[SplitNames, int],
         BinaryClassDatasetSplitStatistic,
@@ -611,29 +740,33 @@ def split_datasets(
             SplitNames.TRAINING,
             1,
         ): BinaryClassDatasetSplitStatistic.TRAIN_POSITIVE_PATIENT_NUM,
+
         (
             SplitNames.TRAINING,
             0,
         ): BinaryClassDatasetSplitStatistic.TRAIN_NEGATIVE_PATIENT_NUM,
+
         (
             SplitNames.VALIDATION,
             1,
         ): BinaryClassDatasetSplitStatistic.VALIDATION_POSITIVE_PATIENT_NUM,
+
         (
             SplitNames.VALIDATION,
             0,
         ): BinaryClassDatasetSplitStatistic.VALIDATION_NEGATIVE_PATIENT_NUM,
+
         (
             SplitNames.TEST,
             1,
         ): BinaryClassDatasetSplitStatistic.TEST_POSITIVE_PATIENT_NUM,
+
         (
             SplitNames.TEST,
             0,
         ): BinaryClassDatasetSplitStatistic.TEST_NEGATIVE_PATIENT_NUM,
     }
 
-    # Maps a split and class label to the corresponding image statistic.
     image_statistic_keys: dict[
         tuple[SplitNames, int],
         BinaryClassDatasetSplitStatistic,
@@ -642,29 +775,33 @@ def split_datasets(
             SplitNames.TRAINING,
             1,
         ): BinaryClassDatasetSplitStatistic.TRAIN_POSITIVE_IMAGE_NUM,
+
         (
             SplitNames.TRAINING,
             0,
         ): BinaryClassDatasetSplitStatistic.TRAIN_NEGATIVE_IMAGE_NUM,
+
         (
             SplitNames.VALIDATION,
             1,
         ): BinaryClassDatasetSplitStatistic.VALIDATION_POSITIVE_IMAGE_NUM,
+
         (
             SplitNames.VALIDATION,
             0,
         ): BinaryClassDatasetSplitStatistic.VALIDATION_NEGATIVE_IMAGE_NUM,
+
         (
             SplitNames.TEST,
             1,
         ): BinaryClassDatasetSplitStatistic.TEST_POSITIVE_IMAGE_NUM,
+
         (
             SplitNames.TEST,
             0,
         ): BinaryClassDatasetSplitStatistic.TEST_NEGATIVE_IMAGE_NUM,
     }
 
-    # Maps a split and class label to the corresponding error category.
     error_report_keys: dict[
         tuple[SplitNames, int],
         BinaryClassDatasetReadError,
@@ -673,29 +810,33 @@ def split_datasets(
             SplitNames.TRAINING,
             1,
         ): BinaryClassDatasetReadError.TRAIN_POSITIVE,
+
         (
             SplitNames.TRAINING,
             0,
         ): BinaryClassDatasetReadError.TRAIN_NEGATIVE,
+
         (
             SplitNames.VALIDATION,
             1,
         ): BinaryClassDatasetReadError.VALIDATION_POSITIVE,
+
         (
             SplitNames.VALIDATION,
             0,
         ): BinaryClassDatasetReadError.VALIDATION_NEGATIVE,
+
         (
             SplitNames.TEST,
             1,
         ): BinaryClassDatasetReadError.TEST_POSITIVE,
+
         (
             SplitNames.TEST,
             0,
         ): BinaryClassDatasetReadError.TEST_NEGATIVE,
     }
 
-    # Initialize every statistic with zero.
     split_report: dict[
         BinaryClassDatasetSplitStatistic,
         int,
@@ -704,7 +845,6 @@ def split_datasets(
         for statistic in BinaryClassDatasetSplitStatistic
     }
 
-    # Initialize every error category with an empty list.
     error_report: dict[
         BinaryClassDatasetReadError,
         list[str],
@@ -713,8 +853,8 @@ def split_datasets(
         for error_type in BinaryClassDatasetReadError
     }
 
-    # Patient counts are based on patients assigned to each split,
-    # independently of whether individual images can be processed.
+    # Patient counts are based on the split assignment, regardless of
+    # whether all images can later be processed.
     for label, patient_splits in (
         (0, splits_a),
         (1, splits_b),
@@ -737,116 +877,480 @@ def split_datasets(
         for split_name in split_names
     }
 
-    for label, patient_dictionary, patient_splits in (
-        (0, dictionary_a, splits_a),
-        (1, dictionary_b, splits_b),
-    ):
+    created_version_roots: list[Path] = []
+
+    try:
+        # Create the configuration version directory.
+        config_version_root.mkdir(
+            parents=True,
+            exist_ok=False,
+        )
+
+        created_version_roots.append(
+            config_version_root
+        )
+
+        # When config_path and data_path are different, create a second
+        # independent version directory for the image data.
+        if data_version_resolved != config_version_resolved:
+            data_version_root.mkdir(
+                parents=True,
+                exist_ok=False,
+            )
+
+            created_version_roots.append(
+                data_version_root
+            )
+
+        csv_root.mkdir(
+            parents=True,
+            exist_ok=False,
+        )
+
         for split_name in split_names:
-            destination_folder = (
-                images_root / split_name.value
+            (
+                data_root
+                / split_name.value
+            ).mkdir(
+                parents=True,
+                exist_ok=False,
             )
 
-            image_statistic_key = image_statistic_keys[
-                split_name,
-                label,
-            ]
+        for label, patient_dictionary, patient_splits in (
+            (0, dictionary_a, splits_a),
+            (1, dictionary_b, splits_b),
+        ):
+            for split_name in split_names:
+                destination_folder = (
+                    data_root
+                    / split_name.value
+                )
 
-            error_report_key = error_report_keys[
-                split_name,
-                label,
-            ]
+                image_statistic_key = image_statistic_keys[
+                    split_name,
+                    label,
+                ]
 
-            for patient_id in patient_splits[split_name]:
-                source_paths = patient_dictionary[patient_id]
+                error_report_key = error_report_keys[
+                    split_name,
+                    label,
+                ]
 
-                for source_path_value in source_paths:
-                    source_path = Path(source_path_value)
-                    destination_path: Path | None = None
+                for patient_id in patient_splits[split_name]:
+                    source_paths = patient_dictionary[
+                        patient_id
+                    ]
 
-                    try:
-                        if not source_path.is_file():
-                            raise FileNotFoundError(
-                                f"Image was not found: {source_path}"
-                            )
+                    for source_path_value in source_paths:
+                        source_path = Path(
+                            source_path_value
+                        )
 
-                        pid = source_path.parent.parent.name
-                        sid = source_path.parent.name
-                        iid = source_path.stem
+                        destination_path: Path | None = None
 
-                        if image_converting_function is None:
-                            destination_path = (
-                                destination_folder
-                                / f"{pid}_{sid}_{source_path.name}"
-                            )
+                        try:
+                            if not source_path.is_file():
+                                raise FileNotFoundError(
+                                    f"Image was not found: "
+                                    f"{source_path}"
+                                )
 
-                            shutil.copy2(
-                                source_path,
-                                destination_path,
-                            )
-                        else:
-                            destination_path = (
-                                destination_folder
-                                / f"{pid}_{sid}_{iid}.png"
-                            )
-
-                            image_array = image_converting_function(
+                            pid = (
                                 source_path
+                                .parent
+                                .parent
+                                .name
                             )
 
-                            image_array = _prepare_array_for_png(
-                                image_array
+                            sid = source_path.parent.name
+                            iid = source_path.stem
+
+                            if image_converting_function is None:
+                                destination_path = (
+                                    destination_folder
+                                    / (
+                                        f"{pid}_{sid}_"
+                                        f"{source_path.name}"
+                                    )
+                                )
+
+                                shutil.copy2(
+                                    source_path,
+                                    destination_path,
+                                )
+
+                            else:
+                                destination_path = (
+                                    destination_folder
+                                    / f"{pid}_{sid}_{iid}.png"
+                                )
+
+                                image_array = (
+                                    image_converting_function(
+                                        source_path
+                                    )
+                                )
+
+                                image_array = (
+                                    _prepare_array_for_png(
+                                        image_array
+                                    )
+                                )
+
+                                Image.fromarray(
+                                    image_array
+                                ).save(
+                                    destination_path
+                                )
+
+                        except Exception as error:
+                            # Remove a partially created output file.
+                            if (
+                                destination_path is not None
+                                and destination_path.exists()
+                            ):
+                                destination_path.unlink()
+
+                            error_report[
+                                error_report_key
+                            ].append(
+                                str(source_path)
                             )
 
-                            Image.fromarray(image_array).save(
-                                destination_path
+                            print(
+                                f"Failed image: {source_path}. "
+                                f"Error: {error}"
                             )
 
-                    except Exception as error:
-                        # Remove a partially created output file, if any.
-                        if (
-                            destination_path is not None
-                            and destination_path.exists()
-                        ):
-                            destination_path.unlink()
+                            continue
 
-                        error_report[error_report_key].append(
-                            str(source_path)
+                        # This point is reached only after successful
+                        # copying or PNG generation.
+                        split_report[
+                            image_statistic_key
+                        ] += 1
+
+                        # Store the path relative to:
+                        #
+                        #     data_path / version / data
+                        relative_filename = (
+                            destination_path
+                            .relative_to(data_root)
+                            .as_posix()
                         )
 
-                        print(
-                            f"Failed image: {source_path}. "
-                            f"Error: {error}"
+                        csv_rows[split_name].append(
+                            {
+                                "filename": relative_filename,
+                                "label": label,
+                            }
                         )
 
-                        continue
+        csv_paths: dict[SplitNames, Path] = {}
 
-                    # This point is reached only after successful
-                    # copying or PNG generation.
-                    split_report[image_statistic_key] += 1
-
-                    csv_rows[split_name].append(
-                        {
-                            "filename": str(
-                                destination_path.resolve()
-                            ),
-                            "label": label,
-                        }
-                    )
-
-    for split_name in split_names:
-        csv_path = csv_root / f"{split_name.value}.csv"
-
-        with csv_path.open(
-            "w",
-            newline="",
-            encoding="utf-8",
-        ) as csv_file:
-            writer = csv.DictWriter(
-                csv_file,
-                fieldnames=["filename", "label"],
+        for split_name in split_names:
+            csv_path = (
+                csv_root
+                / f"{split_name.value}.csv"
             )
 
-            writer.writeheader()
-            writer.writerows(csv_rows[split_name])
+            csv_paths[split_name] = csv_path
+
+            with csv_path.open(
+                "w",
+                newline="",
+                encoding="utf-8",
+            ) as csv_file:
+                writer = csv.DictWriter(
+                    csv_file,
+                    fieldnames=[
+                        "filename",
+                        "label",
+                    ],
+                )
+
+                writer.writeheader()
+                writer.writerows(
+                    csv_rows[split_name]
+                )
+
+        # Build per-split information for certificate.yaml.
+        split_certificate: dict[
+            str,
+            dict[str, object],
+        ] = {}
+
+        for split_name in split_names:
+            negative_patient_count = split_report[
+                patient_statistic_keys[
+                    split_name,
+                    0,
+                ]
+            ]
+
+            positive_patient_count = split_report[
+                patient_statistic_keys[
+                    split_name,
+                    1,
+                ]
+            ]
+
+            negative_image_count = split_report[
+                image_statistic_keys[
+                    split_name,
+                    0,
+                ]
+            ]
+
+            positive_image_count = split_report[
+                image_statistic_keys[
+                    split_name,
+                    1,
+                ]
+            ]
+
+            negative_error_count = len(
+                error_report[
+                    error_report_keys[
+                        split_name,
+                        0,
+                    ]
+                ]
+            )
+
+            positive_error_count = len(
+                error_report[
+                    error_report_keys[
+                        split_name,
+                        1,
+                    ]
+                ]
+            )
+
+            split_certificate[
+                split_name.value
+            ] = {
+                "csv": (
+                    Path("csv")
+                    / csv_paths[split_name].name
+                ).as_posix(),
+
+                # This directory is relative to data_root.
+                "data_directory": split_name.value,
+
+                "patients": {
+                    "negative": negative_patient_count,
+                    "positive": positive_patient_count,
+                    "total": (
+                        negative_patient_count
+                        + positive_patient_count
+                    ),
+                },
+
+                "images": {
+                    "negative": negative_image_count,
+                    "positive": positive_image_count,
+                    "total": (
+                        negative_image_count
+                        + positive_image_count
+                    ),
+                },
+
+                "failed_images": {
+                    "negative": negative_error_count,
+                    "positive": positive_error_count,
+                    "total": (
+                        negative_error_count
+                        + positive_error_count
+                    ),
+                },
+            }
+
+        source_image_counts = {
+            "negative": sum(
+                len(paths)
+                for paths in dictionary_a.values()
+            ),
+            "positive": sum(
+                len(paths)
+                for paths in dictionary_b.values()
+            ),
+        }
+
+        source_image_counts["total"] = (
+            source_image_counts["negative"]
+            + source_image_counts["positive"]
+        )
+
+        saved_image_counts = {
+            "negative": sum(
+                split_report[
+                    image_statistic_keys[
+                        split_name,
+                        0,
+                    ]
+                ]
+                for split_name in split_names
+            ),
+
+            "positive": sum(
+                split_report[
+                    image_statistic_keys[
+                        split_name,
+                        1,
+                    ]
+                ]
+                for split_name in split_names
+            ),
+        }
+
+        saved_image_counts["total"] = (
+            saved_image_counts["negative"]
+            + saved_image_counts["positive"]
+        )
+
+        failed_image_counts = {
+            "negative": sum(
+                len(
+                    error_report[
+                        error_report_keys[
+                            split_name,
+                            0,
+                        ]
+                    ]
+                )
+                for split_name in split_names
+            ),
+
+            "positive": sum(
+                len(
+                    error_report[
+                        error_report_keys[
+                            split_name,
+                            1,
+                        ]
+                    ]
+                )
+                for split_name in split_names
+            ),
+        }
+
+        failed_image_counts["total"] = (
+            failed_image_counts["negative"]
+            + failed_image_counts["positive"]
+        )
+
+        certificate = {
+            "schema_version": "1.0",
+
+            "dataset": {
+                "name": dataset_name,
+                "version": version,
+                "task_type": "binary_classification",
+                "created_at": datetime.now(
+                    timezone.utc
+                ).isoformat(),
+            },
+
+            "classes": {
+                "negative": {
+                    "label": 0,
+                    "source": "dictionary_a",
+                },
+
+                "positive": {
+                    "label": 1,
+                    "source": "dictionary_b",
+                },
+            },
+
+            "generation": {
+                "split_type": split_type.value,
+                "random_state": random_state,
+
+                "image_conversion": {
+                    "enabled": (
+                        image_converting_function
+                        is not None
+                    ),
+
+                    "function": (
+                        getattr(
+                            image_converting_function,
+                            "__qualname__",
+                            None,
+                        )
+                        if image_converting_function
+                        is not None
+                        else None
+                    ),
+                },
+            },
+
+            "storage": {
+                # Relative to the directory containing certificate.yaml.
+                "csv_root": _path_reference(
+                    csv_root,
+                    config_root,
+                ),
+
+                # Relative when possible, absolute on different Windows
+                # drives.
+                "data_root": _path_reference(
+                    data_root,
+                    config_root,
+                ),
+
+                "csv_filename_paths": {
+                    "path_type": "relative",
+                    "relative_to": "data_root",
+                },
+            },
+
+            "splits": split_certificate,
+
+            "totals": {
+                "patients": {
+                    "negative": len(dictionary_a),
+                    "positive": len(dictionary_b),
+                    "total": (
+                        len(dictionary_a)
+                        + len(dictionary_b)
+                    ),
+                },
+
+                "source_images": source_image_counts,
+                "saved_images": saved_image_counts,
+                "failed_images": failed_image_counts,
+            },
+        }
+
+        certificate_path = (
+            config_root
+            / "certificate.yaml"
+        )
+
+        with certificate_path.open(
+            "w",
+            encoding="utf-8",
+        ) as certificate_file:
+            yaml.safe_dump(
+                certificate,
+                certificate_file,
+                sort_keys=False,
+                allow_unicode=True,
+            )
+
+    except Exception:
+        # Remove only version directories created by this function.
+        for created_root in reversed(
+            created_version_roots
+        ):
+            if created_root.exists():
+                shutil.rmtree(
+                    created_root
+                )
+
+        raise
 
     return split_report, error_report
