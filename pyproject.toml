@@ -17,7 +17,11 @@ dependencies = [
     "scikit-learn (>=1.8.0,<2.0.0)",
     "pydicom (>=3.0.2,<4.0.0)",
     "reportlab (>=4.5.1,<5.0.0)",
-    "opencv-python (>=5.0.0.93,<6.0.0.0)"
+    "opencv-python (>=5.0.0.93,<6.0.0.0)",
+    "torch (>=2.11.0,<3.0.0)",
+    "torchvision (>=0.26.0,<0.27.0)",
+    "lightning (>=2.6.5,<3.0.0)",
+    "tensorboard (>=2.21.0,<3.0.0)"
 ]
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
@@ -26,6 +30,15 @@ build-backend = "poetry.core.masonry.api"
 [tool.poetry]
 package-mode = false
 
+[[tool.poetry.source]]
+name = "pytorch"
+url = "https://download.pytorch.org/whl/cu128"
+priority = "explicit"
+
+
+[tool.poetry.dependencies]
+torch = {source = "pytorch"}
+torchvision = {source = "pytorch"}
 [dependency-groups]
 dev = [
     "dvc (>=3.67.1,<4.0.0)"
