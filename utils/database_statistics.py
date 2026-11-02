@@ -24,7 +24,7 @@ DISEASE_COLUMNS = [
 
 POPULATIONS = [
     {
-        "population": "kvp=90, detector=direct, view=AP",
+        "population": "zxvp=90, detector=direct, view=AP",
         "kvp": 90,
         "detector_type_code": "direct",
         "view_code": "AP",
@@ -1010,7 +1010,7 @@ def population_mAs_statistics(
     mean_d90 = mas_df_d90['exposure_mas'].mean()
     sdev_d90 = mas_df_d90['exposure_mas'].std()
 
-    mas_df_s120 = mas_df[mas_df["population"] == "DIRECT, kVp=110"]
+    mas_df_s120 = mas_df[mas_df["population"] == "SCINTILLATOR, kVp=120"]
     mean_s120 = mas_df_s120['exposure_mas'].mean()
     sdev_s120 = mas_df_s120['exposure_mas'].std()
 

@@ -392,7 +392,7 @@ def _format_population_header(
     kvp, detector, view = _parse_population_name(population_name)
 
     return (
-        f"{kvp} keV<br/>"
+        f"{kvp} kVp<br/>"
         f"{detector.title()}<br/>"
         f"{view}<br/>"
         f"Patients: {unique_patients}<br/>"
