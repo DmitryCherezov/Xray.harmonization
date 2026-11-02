@@ -51,14 +51,18 @@ class DataSetsSettings:
             MIMIC_IV_root = Path(
                 conf.get('MIMIC_IV_root')
             ),
+            
             MIMIC_CXR_root = Path(
                 conf.get('MIMIC_CXR_root')
             ),
+            
             MIMIC_CXR_JPG_root = Path(
                 conf.get('MIMIC_CXR_JPG_root')
             ),
-            DB_name = Path( 'databases' ) / \
+
+            DB_name = Path( conf.get('DB_root') ) / \
                 conf.get('DB_name'),
+
             SQL_script = Path( 'sql_scripts' ) / \
                 conf.get('SQL_script_name'),
 

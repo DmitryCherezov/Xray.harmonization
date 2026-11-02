@@ -1,9 +1,11 @@
-MIMIC_IV_root: D:\003.Data\MIMIC-IV.v3.1
-MIMIC_CXR_root: D:\003.Data\MIMIC-CXR.v2.1-60k
-MIMIC_CXR_JPG_root: D:\003.Data\MIMIC-CXR-JPG.v2.1
-DB_root: E:\003.DataBase\001.Xray-Harmonization\
+MIMIC_IV_root: E:\000.datasets\MIMIC-IV.v3.1
+MIMIC_CXR_root: E:\000.datasets\MIMIC-CXR.v2.1
+MIMIC_CXR_JPG_root: E:\000.datasets\MIMIC-CXR-JPG.v2.1
+
+DB_root: E:\003.DataBase\001.Xray-Harmonization
 DB_name: mimic-iv-v3.1.db
 SQL_script_name: create_hosp_sqlite.sql
+
 AP_DETECTION_CONFIG: datasets\ap-detection
 AP_DETECTION_DATA: datasets\ap-detection
 AP_DETECTION_VERSION: v1.0.0
